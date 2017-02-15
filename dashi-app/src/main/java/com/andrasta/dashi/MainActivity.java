@@ -21,6 +21,7 @@ import android.widget.Toast;
 import com.andrasta.dashi.camera.Camera;
 import com.andrasta.dashi.camera.ImageSaver;
 import com.andrasta.dashi.utils.PermissionsHelper;
+import com.andrasta.dashi.view.AutoFitTextureView;
 
 import java.io.File;
 
@@ -48,11 +49,11 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
         file = new File(Environment.getExternalStorageDirectory(), "pic.jpg");
 
         if (!PermissionsHelper.hasPermission(this, Manifest.permission.CAMERA)) {
-            requestId = PermissionsHelper.requestCameraPermission(this, Manifest.permission.CAMERA, R.string.camera_permission_rationale);
+            requestId = PermissionsHelper.requestPermission(this, Manifest.permission.CAMERA, R.string.camera_permission_rationale);
             return;
         }
         if (!PermissionsHelper.hasPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-            requestId = PermissionsHelper.requestCameraPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE, R.string.storage_permission_rationale);
+            requestId = PermissionsHelper.requestPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE, R.string.storage_permission_rationale);
             return;
         }
 

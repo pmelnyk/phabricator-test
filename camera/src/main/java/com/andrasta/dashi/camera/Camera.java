@@ -28,8 +28,8 @@ import android.view.Display;
 import android.view.Surface;
 import android.view.TextureView;
 
-import com.andrasta.dashi.AutoFitTextureView;
 import com.andrasta.dashi.camera.CameraUtils.CompareSizesByArea;
+import com.andrasta.dashi.view.AutoFitTextureView;
 
 import java.util.Arrays;
 import java.util.Collections;

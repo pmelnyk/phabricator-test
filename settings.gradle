@@ -1,1 +1,1 @@
-include ':dashi-app', ':utils'
+include ':dashi-app', ':utils', ':camera'

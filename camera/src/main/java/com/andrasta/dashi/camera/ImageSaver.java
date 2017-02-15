@@ -8,7 +8,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 /**
- * Saves a JPEG {@link Image} into the specified {@link File}.
+ * Saves an {@link Image} into the specified {@link File}.
  */
 public class ImageSaver implements Runnable {
     private final Image image;

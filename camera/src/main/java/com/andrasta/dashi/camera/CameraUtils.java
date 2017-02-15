@@ -11,7 +11,7 @@ import java.util.Comparator;
 import java.util.List;
 
 class CameraUtils {
-    private static final String TAG = CameraUtils.class.getSimpleName();
+    private static final String TAG = "CameraUtils";
 
     /**
      * Conversion from screen rotation to JPEG orientation.

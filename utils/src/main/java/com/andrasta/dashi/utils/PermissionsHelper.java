@@ -32,11 +32,11 @@ public class PermissionsHelper {
         return true;
     }
 
-    public static int requestCameraPermission(Fragment fragment, String permission, @StringRes int rationaleText) {
-        return requestCameraPermission(fragment.getActivity(), permission, rationaleText);
+    public static int requestPermission(Fragment fragment, String permission, @StringRes int rationaleText) {
+        return requestPermission(fragment.getActivity(), permission, rationaleText);
     }
 
-    public static int requestCameraPermission(Fragment fragment, String permission, String rationaleText) {
+    public static int requestPermission(Fragment fragment, String permission, String rationaleText) {
         if (fragment instanceof FragmentCompat.OnRequestPermissionsResultCallback) {
             requestId++;
             if (fragment.shouldShowRequestPermissionRationale(permission)) {
@@ -50,11 +50,11 @@ public class PermissionsHelper {
         }
     }
 
-    public static int requestCameraPermission(Activity activity, String permission, @StringRes int rationaleText) {
-        return requestCameraPermission(activity, permission, activity.getString(rationaleText));
+    public static int requestPermission(Activity activity, String permission, @StringRes int rationaleText) {
+        return requestPermission(activity, permission, activity.getString(rationaleText));
     }
 
-    public static int requestCameraPermission(Activity activity, String permission, String rationaleText) {
+    public static int requestPermission(Activity activity, String permission, String rationaleText) {
         if (activity instanceof ActivityCompat.OnRequestPermissionsResultCallback) {
             requestId++;
             if (activity.shouldShowRequestPermissionRationale(permission)) {

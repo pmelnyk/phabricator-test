@@ -8,7 +8,7 @@
     android:background="@color/main_background"
     tools:context="com.andrasta.dashi.MainActivity">
 
-    <com.andrasta.dashi.AutoFitTextureView
+    <com.andrasta.dashi.view.AutoFitTextureView
         android:id="@+id/texture"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
