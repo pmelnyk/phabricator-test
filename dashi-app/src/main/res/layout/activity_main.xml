@@ -8,10 +8,11 @@
     android:background="@color/main_background"
     tools:context="com.andrasta.dashi.MainActivity">
 
-    <com.andrasta.dashi.view.AutoFitTextureView
-        android:id="@+id/texture"
+    <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal|center_vertical"/>
+        android:layout_gravity="center_horizontal|center_vertical"
+        android:textSize="22sp"
+        android:text="Hello ALPR"/>
 
 </FrameLayout>

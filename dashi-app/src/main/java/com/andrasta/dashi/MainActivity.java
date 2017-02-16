@@ -15,13 +15,12 @@ import android.support.annotation.Nullable;
 import android.support.v13.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
-import android.view.View;
 import android.widget.Toast;
 
 import com.andrasta.dashi.camera.Camera;
 import com.andrasta.dashi.camera.ImageSaver;
+import com.andrasta.dashi.utils.Callback;
 import com.andrasta.dashi.utils.PermissionsHelper;
-import com.andrasta.dashi.view.AutoFitTextureView;
 
 import java.io.File;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -30,7 +29,7 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
     private static final String TAG = "MainActivity";
 
     private AtomicBoolean requestImage = new AtomicBoolean();
-    private AutoFitTextureView textureView;
+    private AlprHandler alprHandler;
     private Camera camera;
     private int requestId;
     private File file;
@@ -40,14 +39,8 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        textureView = (AutoFitTextureView) findViewById(R.id.texture);
-        textureView.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                requestImage.set(true);
-            }
-        });
         file = new File(Environment.getExternalStorageDirectory(), "pic.jpg");
+        alprHandler = new AlprHandler(alprCallback);
 
         if (!PermissionsHelper.hasPermission(this, Manifest.permission.CAMERA)) {
             requestId = PermissionsHelper.requestPermission(this, Manifest.permission.CAMERA, R.string.camera_permission_rationale);
@@ -58,7 +51,7 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
             return;
         }
 
-        camera = new Camera(textureView, this);
+        camera = new Camera(this, this);
     }
 
 
@@ -86,7 +79,7 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
                 ExitDialog.newInstance(getString(R.string.permission_discard))
                         .show(getFragmentManager(), "Dialog");
             } else {
-                camera = new Camera(textureView, this);
+                camera = new Camera(this, this);
                 camera.open();
             }
         } else {
@@ -100,8 +93,12 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
             ImageSaver imageSaver = new ImageSaver(reader.acquireNextImage(), file);
             imageSaver.save();
             Toast.makeText(MainActivity.this, "Image saved to " + file.getAbsolutePath(), Toast.LENGTH_SHORT).show();
-        } else {
-            reader.acquireLatestImage().close();
+        }
+
+        try {
+            alprHandler.request(reader.acquireNextImage());
+        } catch (IllegalStateException e) {
+            //expected
         }
     }
 
@@ -119,6 +116,18 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
             });
         }
     }
+
+    private final Callback<AlprHandler.AlprResponse, Exception> alprCallback = new Callback<AlprHandler.AlprResponse, Exception>() {
+        @Override
+        public void onComplete(@NonNull AlprHandler.AlprResponse alprResponse) {
+            Log.d(TAG, "License recognized: " + alprResponse.licensePlate);
+        }
+
+        @Override
+        public void onFailure(@NonNull Exception e) {
+            throw new RuntimeException(e);
+        }
+    };
 
     public static class ExitDialog extends DialogFragment {
 

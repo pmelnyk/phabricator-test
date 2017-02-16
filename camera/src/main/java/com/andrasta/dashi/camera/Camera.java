@@ -2,7 +2,6 @@ package com.andrasta.dashi.camera;
 
 import android.app.Activity;
 import android.content.Context;
-import android.content.res.Configuration;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.Point;
@@ -23,9 +22,6 @@ import android.support.annotation.Nullable;
 import android.util.Size;
 import android.view.Display;
 import android.view.Surface;
-import android.view.TextureView;
-
-import com.andrasta.dashi.view.AutoFitTextureView;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -50,10 +46,6 @@ public class Camera {
      * ID of the current {@link CameraDevice}.
      */
     private String cameraId;
-    /**
-     * An {@link AutoFitTextureView} for camera preview.
-     */
-    private AutoFitTextureView textureView;
     /**
      * A {@link CameraCaptureSession } for camera preview.
      */
@@ -81,7 +73,7 @@ public class Camera {
     /**
      * {@link CaptureRequest.Builder} for the camera preview
      */
-    private CaptureRequest.Builder previewRequestBuilder;
+//    private CaptureRequest.Builder previewRequestBuilder;
     private CaptureRequest.Builder readerRequestBuilder;
     /**
      * A {@link Semaphore} to prevent the app from exiting before closing the camera.
@@ -93,12 +85,10 @@ public class Camera {
     private Context context;
     private boolean opened;
 
-    public Camera(AutoFitTextureView view, CameraListener listener) {
-        textureView = view;
-        textureView.setSurfaceTextureListener(textureListener);
+    public Camera(Activity activity, CameraListener listener) {
         cameraListener = listener;
-        context = view.getContext().getApplicationContext();
-        display = ((Activity) view.getContext()).getWindowManager().getDefaultDisplay();
+        context = activity.getApplicationContext();
+        display = activity.getWindowManager().getDefaultDisplay();
     }
 
     public void open() {
@@ -108,9 +98,7 @@ public class Camera {
         // available, and "onSurfaceTextureAvailable" will not be called. In that case, we can open
         // a camera and start preview from here (otherwise, we wait until the surface is ready in
         // the SurfaceTextureListener).
-        if (textureView.isAvailable()) {
-            openCamera(textureView.getWidth(), textureView.getHeight());
-        }
+        openCamera(800, 1200);
     }
 
     public void close() {
@@ -214,13 +202,13 @@ public class Camera {
 
                 // We fit the aspect ratio of TextureView to the size of preview we picked.
                 int orientation = context.getResources().getConfiguration().orientation;
-                if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                    textureView.setAspectRatio(
-                            previewSize.getWidth(), previewSize.getHeight());
-                } else {
-                    textureView.setAspectRatio(
-                            previewSize.getHeight(), previewSize.getWidth());
-                }
+//                if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+//                    textureView.setAspectRatio(
+//                            previewSize.getWidth(), previewSize.getHeight());
+//                } else {
+//                    textureView.setAspectRatio(
+//                            previewSize.getHeight(), previewSize.getWidth());
+//                }
 
                 this.cameraId = cameraId;
                 return;
@@ -243,7 +231,7 @@ public class Camera {
      * @param viewHeight The height of `textureView`
      */
     private void configureTransform(int viewWidth, int viewHeight) {
-        if (null == textureView || null == previewSize) {
+        if (null == previewSize) {
             return;
         }
         int rotation = display.getRotation();
@@ -263,7 +251,7 @@ public class Camera {
         } else if (Surface.ROTATION_180 == rotation) {
             matrix.postRotate(180, centerX, centerY);
         }
-        textureView.setTransform(matrix);
+//        textureView.setTransform(matrix);
     }
 
     /**
@@ -319,26 +307,26 @@ public class Camera {
      */
     private void createCameraPreviewSession() {
         try {
-            SurfaceTexture texture = textureView.getSurfaceTexture();
-            assert texture != null;
+//            SurfaceTexture texture = textureView.getSurfaceTexture();
+//            assert texture != null;
 
             // We configure the size of default buffer to be the size of camera preview we want.
-            texture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
+//            texture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
 
             // This is the output Surface we need to start preview.
-            Surface surface = new Surface(texture);
+//            Surface surface = new Surface(texture);
 
             // We set up a CaptureRequest.Builder with the output Surface.
-            previewRequestBuilder
-                    = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-            previewRequestBuilder.addTarget(surface);
+//            previewRequestBuilder
+//                    = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+//            previewRequestBuilder.addTarget(surface);
 
             readerRequestBuilder
                     = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             readerRequestBuilder.addTarget(imageReader.getSurface());
 
             // Here, we create a CameraCaptureSession for camera preview.
-            List<Surface> surfaces = Arrays.asList(surface, imageReader.getSurface());
+            List<Surface> surfaces = Arrays.asList(imageReader.getSurface());
             cameraDevice.createCaptureSession(surfaces, captureStateCallback, backgroundHandler);
         } catch (CameraAccessException e) {
             cameraListener.onError(false, e);
@@ -388,12 +376,12 @@ public class Camera {
             captureSession = cameraCaptureSession;
             try {
                 // Auto focus should be continuous for camera preview.
-                previewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE,
-                        CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-                CaptureRequest previewRequest = previewRequestBuilder.build();
+//                readerRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE,
+//                        CaptureRequest.CONTROL_AF_MODE_OFF);
+//                readerRequestBuilder.set
+//                CaptureRequest previewRequest = previewRequestBuilder.build();
                 CaptureRequest readerRequest = readerRequestBuilder.build();
-                captureSession.setRepeatingBurst(Arrays.asList(previewRequest, readerRequest),
-                        null, backgroundHandler);
+                captureSession.setRepeatingRequest(readerRequest, null, backgroundHandler);
             } catch (CameraAccessException e) {
                 cameraListener.onError(false, e);
             }
@@ -402,32 +390,6 @@ public class Camera {
         @Override
         public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
             cameraListener.onError(false, null);
-        }
-    };
-
-    /**
-     * {@link TextureView.SurfaceTextureListener} handles several lifecycle events on a
-     * {@link TextureView}.
-     */
-    @SuppressWarnings("FieldCanBeLocal")
-    private final TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
-        @Override
-        public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
-            openCamera(width, height);
-        }
-
-        @Override
-        public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) {
-            configureTransform(width, height);
-        }
-
-        @Override
-        public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
-            return true;
-        }
-
-        @Override
-        public void onSurfaceTextureUpdated(SurfaceTexture texture) {
         }
     };
 
