@@ -1,0 +1,4 @@
+/build
+/.externalNativeBuild
+/CMakeCache.txt
+/CMakeFiles

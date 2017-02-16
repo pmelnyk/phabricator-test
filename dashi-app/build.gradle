@@ -17,13 +17,29 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+
+    sourceSets {
+        main {
+            // Bundle so files with the final apk.
+            // NOTE: Currently bundles all shared objects in that directory.
+            // It was not straightforward to exclude in Android sourceSets at the time of writing,
+            // see https://code.google.com/p/android/issues/detail?id=64957
+            // FIXME - point to the proper the dir to non debug version for the release
+            jniLibs.srcDirs = ['../openalpr/build/intermediates/bundles/debug/jni',
+                    '../openalpr/jni_tess',
+                    '../openalpr/jni_openalpr'
+            ]
+        }
+    }
 }
 
 dependencies {
-    compile fileTree(dir: 'libs', include: ['*.jar'])
+    compile fileTree(include: ['*.jar'], dir: 'libs')
     androidTestCompile('com.android.support.test.espresso:espresso-core:2.2.2', {
         exclude group: 'com.android.support', module: 'support-annotations'
     })
     compile 'com.android.support:appcompat-v7:25.1.1'
     testCompile 'junit:junit:4.12'
+    compile project(':openalpr')
+    compile project(':utils')
 }
