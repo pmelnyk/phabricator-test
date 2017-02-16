@@ -24,10 +24,13 @@ import com.andrasta.dashi.utils.PermissionsHelper;
 import com.andrasta.dashi.view.AutoFitTextureView;
 
 import java.io.File;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MainActivity extends AppCompatActivity implements ActivityCompat.OnRequestPermissionsResultCallback, Camera.CameraListener {
     private static final String TAG = "MainActivity";
 
+    private AtomicBoolean requestImage = new AtomicBoolean();
+    private AutoFitTextureView textureView;
     private Camera camera;
     private int requestId;
     private File file;
@@ -37,13 +40,11 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mTextureView = (AutoFitTextureView) findViewById(R.id.texture);
-        mTextureView.setOnClickListener(new View.OnClickListener() {
+        textureView = (AutoFitTextureView) findViewById(R.id.texture);
+        textureView.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (camera != null) {
-                    camera.requestImage();
-                }
+                requestImage.set(true);
             }
         });
         file = new File(Environment.getExternalStorageDirectory(), "pic.jpg");
@@ -57,13 +58,9 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
             return;
         }
 
-        camera = new Camera(mTextureView, this);
+        camera = new Camera(textureView, this);
     }
 
-    /**
-     * An {@link AutoFitTextureView} for camera preview.
-     */
-    private AutoFitTextureView mTextureView;
 
     @Override
     public void onResume() {
@@ -89,7 +86,7 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
                 ExitDialog.newInstance(getString(R.string.permission_discard))
                         .show(getFragmentManager(), "Dialog");
             } else {
-                camera = new Camera(mTextureView, this);
+                camera = new Camera(textureView, this);
                 camera.open();
             }
         } else {
@@ -99,9 +96,13 @@ public class MainActivity extends AppCompatActivity implements ActivityCompat.On
 
     @Override
     public void onImageAvailable(ImageReader reader) {
-        ImageSaver imageSaver = new ImageSaver(reader.acquireNextImage(), file);
-        imageSaver.save();
-        Toast.makeText(MainActivity.this, "Image saved to " + file.getAbsolutePath(), Toast.LENGTH_SHORT).show();
+        if (requestImage.getAndSet(false)) {
+            ImageSaver imageSaver = new ImageSaver(reader.acquireNextImage(), file);
+            imageSaver.save();
+            Toast.makeText(MainActivity.this, "Image saved to " + file.getAbsolutePath(), Toast.LENGTH_SHORT).show();
+        } else {
+            reader.acquireLatestImage().close();
+        }
     }
 
     @Override

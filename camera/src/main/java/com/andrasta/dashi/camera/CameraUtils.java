@@ -79,9 +79,9 @@ class CameraUtils {
         // Pick the smallest of those big enough. If there is no one big enough, pick the
         // largest of those not big enough.
         if (bigEnough.size() > 0) {
-            return Collections.min(bigEnough, new CompareSizesByArea());
+            return Collections.min(bigEnough, SIZE_COMPARATOR);
         } else if (notBigEnough.size() > 0) {
-            return Collections.max(notBigEnough, new CompareSizesByArea());
+            return Collections.max(notBigEnough, SIZE_COMPARATOR);
         } else {
             Log.e(TAG, "Couldn't find any suitable preview size");
             return choices[0];
@@ -109,16 +109,14 @@ class CameraUtils {
     }
 
     /**
-     * Compares two {@code Size}s based on their areas.
+     * Compares two {@link Size} objects based on their areas.
      */
-    static class CompareSizesByArea implements Comparator<Size> {
-
+    static Comparator<Size> SIZE_COMPARATOR = new Comparator<Size>() {
         @Override
         public int compare(Size lhs, Size rhs) {
             // We cast here to ensure the multiplications won't overflow
             return Long.signum((long) lhs.getWidth() * lhs.getHeight() -
                     (long) rhs.getWidth() * rhs.getHeight());
         }
-
-    }
+    };
 }
