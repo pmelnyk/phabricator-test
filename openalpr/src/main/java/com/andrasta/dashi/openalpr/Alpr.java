@@ -13,39 +13,39 @@ import java.nio.ByteBuffer;
 
 public final class Alpr {
 
-    private final long nativeRefernce;
+    private final long nativeReference;
 
     public Alpr(@Nullable String country, @Nullable String config, @Nullable String runtimeDir) {
-        nativeRefernce = nCreate(config, config, runtimeDir);
+        nativeReference = nCreate(country, config, runtimeDir);
     }
 
     public @NonNull String getVersion() {
-        return nGetVersion(nativeRefernce);
+        return nGetVersion(nativeReference);
     }
 
-    public String recognizeFromFilePath(@NonNull String filePath) {
+    public @NonNull AlprResult recognizeFromFilePath(@NonNull String filePath) {
         Preconditions.assertParameterNotNull(filePath,"filePath");
-        return nRecognizeFilePath(nativeRefernce, filePath);
+        return nRecognizeFilePath(nativeReference, filePath);
     }
 
-    public String recognizeFromByteArray(@NonNull byte[] pixelData, int width, int height) {
+    public @NonNull AlprResult recognizeFromByteArray(@NonNull byte[] pixelData, int width, int height) {
         Preconditions.assertParameterNotNull(pixelData,"pixelData");
-        return nRecognizeByteArray(nativeRefernce, pixelData, width, height);
+        return nRecognizeByteArray(nativeReference, pixelData, width, height);
     }
 
-    public String recognizeFromFileData(@NonNull byte[] fileData) {
+    public  @NonNull AlprResult recognizeFromFileData(@NonNull byte[] fileData) {
         Preconditions.assertParameterNotNull(fileData,"fileData");
-        return nRecognizeFileData(nativeRefernce, fileData);
+        return nRecognizeFileData(nativeReference, fileData);
     }
 
-    public String recognizeFromByteBuffer(@NonNull ByteBuffer byteBuffer,  int pixelSize, int width, int height) {
+    public @NonNull AlprResult recognizeFromByteBuffer(@NonNull ByteBuffer byteBuffer,  int pixelSize, int width, int height) {
         Preconditions.assertParameterNotNull(byteBuffer,"byteBuffer");
-        return nRecognizeByteBuffer(nativeRefernce, byteBuffer, pixelSize, width, height);
+        return nRecognizeByteBuffer(nativeReference, byteBuffer, pixelSize, width, height);
     }
 
     @Override
     protected void finalize() throws Throwable {
-        nDelete(nativeRefernce);
+        nDelete(nativeReference);
     }
 
     // native calls
@@ -55,13 +55,13 @@ public final class Alpr {
 
     private static native String nGetVersion(long nativeReference);
 
-    private static native String nRecognizeFilePath(long nativeReference, @NonNull String filePath);
+    private static native AlprResult nRecognizeFilePath(long nativeReference, @NonNull String filePath);
 
-    private static native String nRecognizeFileData(long nativeReference, @NonNull byte[] fileData);
+    private static native AlprResult nRecognizeFileData(long nativeReference, @NonNull byte[] fileData);
 
-    private static native String nRecognizeByteArray(long nativeReference, @NonNull byte[] pixelData, int width, int heigh);
+    private static native AlprResult nRecognizeByteArray(long nativeReference, @NonNull byte[] pixelData, int width, int heigh);
 
-    private static native String nRecognizeByteBuffer(long nativeReference, @NonNull ByteBuffer byteBuffer, int pixelSize, int width, int height);
+    private static native AlprResult nRecognizeByteBuffer(long nativeReference, @NonNull ByteBuffer byteBuffer, int pixelSize, int width, int height);
 
 
 }

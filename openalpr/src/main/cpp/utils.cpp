@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <android/log.h>
 #include <pthread.h>
+#include <iostream>
 
 //
 // Created by Martin B on 2/14/17.
@@ -29,13 +30,100 @@ jstring jstring_from_string(JNIEnv* env, std::string string) {
 
 void throwRuntimeException(JNIEnv *env, std::string message) {
     jclass exClass;
-    char *className = "java/lang/RuntimeException";
+    const char *className = "java/lang/RuntimeException";
     jclass clazz = env->FindClass(className);
-    if (clazz) {
+    if (! clazz) {
         env->ThrowNew(clazz, message.c_str());
     }
 }
 
+
+jclass find_class(JNIEnv* env, const char* className) {
+    jclass clazz = env->FindClass(className);
+    if (! clazz) {
+        std::string message = std::string("Cannot find class: ") + className;
+        throwRuntimeException(env, message);
+    }
+    return clazz;
+}
+
+
+
+
+jmethodID find_method(JNIEnv* env, jclass clazz, const char* methodName, const char* signature) {
+    jmethodID methodID = 0;
+    if (! env->ExceptionCheck()) {
+        methodID = env->GetMethodID(clazz, methodName, signature);
+        if (! methodID) {
+            std::string message = std::string("Cannot find constructor: ") + signature;
+            throwRuntimeException(env, message);
+        }
+    }
+    return methodID;
+}
+
+
+
+jmethodID find_constructor(JNIEnv* env, jclass clazz, const char* signature) {
+    return find_method(env, clazz, "<init>", signature);
+}
+
+
+jobject create_object(JNIEnv *env, jclass clazz, jmethodID constructor, ...) {
+    va_list args;
+    va_start(args, constructor);
+    jobject createdObject = env->NewObjectV(clazz, constructor, args);
+    va_end(args);
+    return createdObject;
+}
+
+
+static const char* TO_STRING_METHOD_NAME = "toString";
+static const char* TO_STRING_METHOD_SIGNATURE = "()Ljava/lang/String;";
+std::string call_toString(JNIEnv *env, jobject object) {
+    jclass clazz = env->GetObjectClass(object);
+    jmethodID methodId = find_method(env, clazz, TO_STRING_METHOD_NAME, TO_STRING_METHOD_SIGNATURE);
+    jstring result = (jstring)env->CallObjectMethod(object, methodId);
+    return string_from_jstring(env, result);
+}
+
+// constructor class
+
+
+JConstructor::JConstructor(const char* className, const char* signature) {
+    _className = className;
+    _signature = signature;
+    _methodId = 0;
+    _clazz = 0;
+}
+
+jclass JConstructor::getClass(JNIEnv* env) {
+    if (! _clazz) {
+        jclass clazz = find_class(env, _className);
+        JEXCEPTION_CHECK(env);
+        _clazz = (jclass)env->NewGlobalRef(clazz);
+    }
+    return _clazz;
+}
+
+
+jobject JConstructor::newObject(JNIEnv* env, ...) {
+    jclass clazz = getClass(env);
+    JEXCEPTION_CHECK(env);
+    if (! _methodId) {
+        _methodId = find_constructor(env, _clazz, _signature);
+        JEXCEPTION_CHECK(env);
+    }
+    va_list args;
+    va_start(args, env);
+    jobject createdObject = env->NewObjectV(_clazz, _methodId, args);
+    va_end(args);
+    return createdObject;
+}
+
+
+
+///
 
 static int pfd[2];
 static pthread_t thr;

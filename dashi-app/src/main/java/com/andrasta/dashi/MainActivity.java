@@ -9,6 +9,7 @@ import android.util.Log;
 import android.widget.TextView;
 
 import com.andrasta.dashi.openalpr.Alpr;
+import com.andrasta.dashi.openalpr.AlprResult;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -26,29 +27,26 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         TextView tv = (TextView)findViewById(R.id.hello);
-        Alpr alpr = new Alpr("us", "/data/local/tmp/openalpr.conf","/data/local/tmp/runtime_data");
+        Alpr alpr = new Alpr(null, "/data/local/tmp/openalpr.conf","/data/local/tmp/runtime_data");
         tv.setText("Version: "+alpr.getVersion());
 
-        String result;
 
-        /*
-        String result = alpr.recognizeFromFilePath("/data/local/tmp/IMG_9383-copy.jpgs");
+        AlprResult result = alpr.recognizeFromFilePath("/data/local/tmp/IMG_9383-copy.jpg");
         Log.w("BLA", "result : "+result);
 
 
 
         try {
-
             RandomAccessFile f = new RandomAccessFile("/data/local/tmp/IMG_9383-copy.jpg", "r");
             byte[] b = new byte[(int) f.length()];
             Log.w("BLA", "byte size: "+b.length);
             f.readFully(b);
             result = alpr.recognizeFromFileData(b);
-            Log.w("BLA", "result3 : "+result);
+            Log.w("BLA", "result2 : "+result);
         } catch (IOException ioe) {
             Log.w("XXX", "", ioe);
         }
-        */
+
 
 
         BitmapFactory.Options options = new BitmapFactory.Options();
@@ -66,14 +64,14 @@ public class MainActivity extends AppCompatActivity {
         ByteBuffer grayBuffer = ByteBuffer.allocateDirect(grayScale.length);
         grayBuffer.put(grayScale);
 
-        for (int i=0; i < 1000; i++) {
+        //for (int i=0; i < 1000; i++) {
             long timestamp = System.currentTimeMillis();
-            result = alpr.recognizeFromByteBuffer(grayBuffer, 1, bitmap.getWidth(), bitmap.getHeight());
+            AlprResult r = alpr.recognizeFromByteBuffer(grayBuffer, 1, bitmap.getWidth(), bitmap.getHeight());
             long delta = System.currentTimeMillis() - timestamp;
-            Log.w("BLA", "result2 : " + result);
+            Log.w("BLA", "result3 : " + r.toString());
             Log.w("BLA", "delta : " + delta);
 
-        }
+        //}
 
 
     }
