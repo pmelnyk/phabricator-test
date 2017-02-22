@@ -1,1 +1,1 @@
-include ':dashi-app', ':utils', ':dashi-client', ':openalpr'
+include ':dashi-app', ':utils', ':dashi-client', ':openalpr', ':camera'

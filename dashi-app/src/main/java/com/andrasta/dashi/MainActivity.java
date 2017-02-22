@@ -1,173 +1,210 @@
 package com.andrasta.dashi;
 
 import android.Manifest;
-import android.content.Context;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.Dialog;
+import android.app.DialogFragment;
+import android.content.DialogInterface;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.Color;
-import android.support.annotation.NonNull;
-import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
-import android.support.v7.app.AppCompatActivity;
+import android.media.ImageReader;
 import android.os.Bundle;
+import android.os.Environment;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityCompat.OnRequestPermissionsResultCallback;
+import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
-import android.widget.TextView;
+import android.view.View;
+import android.widget.Toast;
 
+import com.andrasta.dashi.alpr.AlprHandler;
+import com.andrasta.dashi.camera.Camera;
+import com.andrasta.dashi.camera.Camera.CameraListener;
+import com.andrasta.dashi.camera.ImageSaver;
 import com.andrasta.dashi.location.LocationHelper;
-import com.andrasta.dashi.openalpr.Alpr;
 import com.andrasta.dashi.openalpr.AlprResult;
+import com.andrasta.dashi.openalpr.PlateResult;
+import com.andrasta.dashi.utils.Callback;
+import com.andrasta.dashi.utils.PermissionsHelper;
+import com.andrasta.dashi.utils.Preconditions;
+import com.andrasta.dashi.view.AutoFitTextureView;
 
+import java.io.File;
 import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.nio.Buffer;
-import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-public class MainActivity extends AppCompatActivity {
-
+public class MainActivity extends AppCompatActivity implements OnRequestPermissionsResultCallback, CameraListener {
     private static final String TAG = "MainActivity";
+
+    private final File imageDestination = new File(Environment.getExternalStorageDirectory(), "pic.jpg");
+    private final AtomicBoolean requestImage = new AtomicBoolean();
+    private final File configDir = new File("/data/local/tmp/");
     private LocationHelper locationHelper = new LocationHelper();
-    private Alpr alpr;
+    private ImageSaver imageSaver = new ImageSaver();
+    private AutoFitTextureView textureView;
+    private AlprHandler alprHandler;
+    private Camera camera;
+    private int requestId;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        askForPermissions();
-
-
-        TextView tv = (TextView)findViewById(R.id.hello);
-        Alpr alpr = new Alpr(null, "/data/local/tmp/openalpr.conf","/data/local/tmp/runtime_data");
-        tv.setText("Version: "+alpr.getVersion());
-
-
-        AlprResult result = alpr.recognizeFromFilePath("/data/local/tmp/IMG_9383-copy.jpg");
-        Log.w("BLA", "result : "+result);
-
-
-
-        try {
-            RandomAccessFile f = new RandomAccessFile("/data/local/tmp/IMG_9383-copy.jpg", "r");
-            byte[] b = new byte[(int) f.length()];
-            Log.w("BLA", "byte size: "+b.length);
-            f.readFully(b);
-            result = alpr.recognizeFromFileData(b);
-            Log.w("BLA", "result2 : "+result);
-        } catch (IOException ioe) {
-            Log.w("XXX", "", ioe);
-        }
-
-
-
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inPreferredConfig = Bitmap.Config.ARGB_8888;
-
-        Bitmap bitmap = BitmapFactory.decodeFile("/data/local/tmp/IMG_9383-copy.jpg", options);
-
-
-        int size = bitmap.getByteCount();
-        ByteBuffer buf = ByteBuffer.allocateDirect(size);
-        bitmap.copyPixelsToBuffer(buf);
-
-
-        byte[] grayScale = toGrayScale(bitmap);
-        ByteBuffer grayBuffer = ByteBuffer.allocateDirect(grayScale.length);
-        grayBuffer.put(grayScale);
-
-        //for (int i=0; i < 1000; i++) {
-            long timestamp = System.currentTimeMillis();
-            AlprResult r = alpr.recognizeFromByteBuffer(grayBuffer, 1, bitmap.getWidth(), bitmap.getHeight());
-            long delta = System.currentTimeMillis() - timestamp;
-            Log.w("BLA", "result3 : " + r.toString());
-            Log.w("BLA", "delta : " + delta);
-
-        //}
-
-
-    }
-
-
-
-    private static byte[] toGrayScale(Bitmap bitmap) {
-
-        final int width = bitmap.getWidth();
-        final int height = bitmap.getHeight();
-        byte[] grayScaleArray = new byte[width * height];
-        double GS_RED = 0.299;
-        double GS_GREEN = 0.587;
-        double GS_BLUE = 0.114;
-        int pixel;
-        int R, G, B;
-
-        // scan through every single pixel
-        for (int x = 0; x < width; ++x) {
-            for (int y = 0; y < height; ++y) {
-                // get one pixel color
-                pixel = bitmap.getPixel(x, y);
-
-                // retrieve color of all channels
-                R = Color.red(pixel);
-                G = Color.green(pixel);
-                B = Color.blue(pixel);
-
-                // take conversion up to one single value
-                pixel = (int) (GS_RED * R + GS_GREEN * G + GS_BLUE * B);
-                // set new pixel color to output bitmap
-                int index = width*y + x;
-                grayScaleArray[index] = (byte)pixel;
-                //Show grayscaled image
+        textureView = (AutoFitTextureView) findViewById(R.id.texture);
+        textureView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                requestImage.set(true);
             }
-        }
-        return grayScaleArray;
-    }
+        });
 
-    // permissions
-    private static final int TAG_CODE_PERMISSION_LOCATION = 0x99;
-
-    private void startLocationHelper() {
-        try {
-            locationHelper.start(this);
-        } catch (IOException ioe) {
-            Log.d(TAG,"Cannot start location", ioe);
-        }
-
-    }
-
-    private void askForPermissions() {
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
-                PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) ==
-                        PackageManager.PERMISSION_GRANTED) {
-            startLocationHelper();
-        } else {
-            ActivityCompat.requestPermissions(this, new String[] {
-                            Manifest.permission.ACCESS_FINE_LOCATION,
-                            Manifest.permission.ACCESS_COARSE_LOCATION },
-                    TAG_CODE_PERMISSION_LOCATION);
+        alprHandler = new AlprHandler(configDir, alprCallback);
+        if (askForPermissions()) {
+            afterPermissionsGranted();
         }
     }
 
+    private boolean askForPermissions() {
+        if (!PermissionsHelper.hasPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
+            requestId = PermissionsHelper.requestPermission(this, Manifest.permission.ACCESS_FINE_LOCATION, R.string.location_permission_rationale);
+            return false;
+        }
+        if (!PermissionsHelper.hasPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)) {
+            requestId = PermissionsHelper.requestPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION, R.string.location_permission_rationale);
+            return false;
+        }
+        if (!PermissionsHelper.hasPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+            requestId = PermissionsHelper.requestPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE, R.string.storage_permission_rationale);
+            return false;
+        }
+        if (!PermissionsHelper.hasPermission(this, Manifest.permission.CAMERA)) {
+            requestId = PermissionsHelper.requestPermission(this, Manifest.permission.CAMERA, R.string.camera_permission_rationale);
+            return false;
+        }
+        return true;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        alprHandler.start();
+        if (camera != null) {
+            camera.open();
+        }
+    }
+
+    @Override
+    public void onPause() {
+        alprHandler.stop();
+        if (camera != null) {
+            camera.close();
+        }
+        super.onPause();
+    }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        switch (requestCode) {
-            case TAG_CODE_PERMISSION_LOCATION: {
-                // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0
-                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    // permission was granted, yay! Do the
-                    startLocationHelper();
-
-                } else {
-                    locationHelper.stop(this);
-                }
+        if (requestCode == requestId) {
+            if (!askForPermissions()) {
                 return;
             }
+
+            if (grantResults.length != 1 || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                ExitDialog.newInstance(getString(R.string.permission_discard)).show(getFragmentManager(), "Dialog");
+            } else {
+                afterPermissionsGranted();
+                camera.open();
+            }
+        } else {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
     }
 
+    private void afterPermissionsGranted() {
+        camera = new Camera(textureView, this);
+        try {
+            locationHelper.start(this);
+        } catch (IOException ioe) {
+            Log.d(TAG, "Cannot start location", ioe);
+        }
+    }
 
+    @Override
+    public void onImageAvailable(@NonNull ImageReader reader) {
+        Preconditions.assertParameterNotNull(reader, "reader");
+        if (requestImage.getAndSet(false)) {
+            imageSaver.saveToFile(reader.acquireNextImage(), imageDestination);
+            Toast.makeText(this, "Image saved to " + imageDestination.getAbsolutePath(), Toast.LENGTH_SHORT).show();
+            return;
+        }
 
+        try {
+            alprHandler.recognize(reader.acquireNextImage());
+        } catch (IllegalStateException e) {
+            //expected
+        }
+    }
+
+    @Override
+    public void onError(boolean critical, @Nullable Exception exception) {
+        Log.e(TAG, "Camera error", exception);
+        if (critical) {
+            finish();
+        } else {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Toast.makeText(MainActivity.this, "Fail", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+    }
+
+    private final Callback<AlprResult, Exception> alprCallback = new Callback<AlprResult, Exception>() {
+        @Override
+        public void onComplete(@NonNull AlprResult alprResult) {
+            Log.d(TAG, "AlprResult: " + alprResult);
+            List<PlateResult> results = alprResult.getPlates();
+            if (results.size() > 0) {
+                PlateResult plate = results.get(0);
+                if (plate != null && plate.getBestPlate() != null) {
+                    Log.d(TAG, "Best result: " + plate.getBestPlate().getPlate());
+                }
+            }
+        }
+
+        @Override
+        public void onFailure(@NonNull Exception e) {
+            throw new RuntimeException(e);
+        }
+    };
+
+    public static class ExitDialog extends DialogFragment {
+        private static final String ARG_MESSAGE = "message";
+
+        public static ExitDialog newInstance(String message) {
+            ExitDialog dialog = new ExitDialog();
+            Bundle args = new Bundle();
+            args.putString(ARG_MESSAGE, message);
+            dialog.setArguments(args);
+            return dialog;
+        }
+
+        @Override
+        public Dialog onCreateDialog(Bundle savedInstanceState) {
+            final Activity activity = getActivity();
+            return new AlertDialog.Builder(activity)
+                    .setMessage(getArguments().getString(ARG_MESSAGE))
+                    .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialogInterface, int i) {
+                            activity.finish();
+                        }
+                    })
+                    .create();
+        }
+    }
 }
