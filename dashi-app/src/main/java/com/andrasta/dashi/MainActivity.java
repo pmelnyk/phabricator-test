@@ -16,6 +16,7 @@ import android.support.v4.app.ActivityCompat.OnRequestPermissionsResultCallback;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.andrasta.dashi.alpr.AlprHandler;
@@ -26,6 +27,7 @@ import com.andrasta.dashi.location.LocationHelper;
 import com.andrasta.dashi.openalpr.AlprResult;
 import com.andrasta.dashi.openalpr.PlateResult;
 import com.andrasta.dashi.utils.Callback;
+import com.andrasta.dashi.utils.CyclicBuffer;
 import com.andrasta.dashi.utils.PermissionsHelper;
 import com.andrasta.dashi.utils.Preconditions;
 import com.andrasta.dashi.view.AutoFitTextureView;
@@ -42,8 +44,10 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
     private final AtomicBoolean requestImage = new AtomicBoolean();
     private final File configDir = new File("/data/local/tmp/");
     private LocationHelper locationHelper = new LocationHelper();
+    private CyclicBuffer<String> resultsBuffer = new CyclicBuffer<>(10);
     private ImageSaver imageSaver = new ImageSaver();
     private AutoFitTextureView textureView;
+    private TextView recognitionResult;
     private AlprHandler alprHandler;
     private Camera camera;
     private int requestId;
@@ -53,6 +57,14 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        recognitionResult = (TextView) findViewById(R.id.recognition_result);
+        recognitionResult.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                resultsBuffer.reset();
+                recognitionResult.setText("");
+            }
+        });
         textureView = (AutoFitTextureView) findViewById(R.id.texture);
         textureView.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -171,9 +183,27 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
             if (results.size() > 0) {
                 PlateResult plate = results.get(0);
                 if (plate != null && plate.getBestPlate() != null) {
-                    Log.d(TAG, "Best result: " + plate.getBestPlate().getPlate());
+                    String result = plate.getBestPlate().getPlate();
+                    Log.d(TAG, "Best result: " + result);
+                    showResult(result);
                 }
             }
+        }
+
+        private void showResult(String licensePlate) {
+            resultsBuffer.add(licensePlate);
+            final StringBuilder sb = new StringBuilder();
+            for (String pl : resultsBuffer.asList()) {
+                if (pl != null) {
+                    sb.append(pl).append("\n");
+                }
+            }
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    recognitionResult.setText(sb.toString());
+                }
+            });
         }
 
         @Override
