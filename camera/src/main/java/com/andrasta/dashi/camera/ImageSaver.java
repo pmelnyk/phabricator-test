@@ -8,7 +8,6 @@ import com.andrasta.dashi.utils.Preconditions;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -35,9 +34,7 @@ public class ImageSaver {
 
         @Override
         public void run() {
-            ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-            byte[] bytes = new byte[buffer.remaining()];
-            buffer.get(bytes);
+            byte[] bytes = ImageUtil.imageToJpeg(image);
             try (FileOutputStream fos = new FileOutputStream(file)) {
                 fos.write(bytes);
             } catch (IOException e) {
