@@ -6,6 +6,8 @@ import android.app.Fragment;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.pm.PackageManager;
+import android.os.Handler;
+import android.os.Looper;
 import android.support.annotation.StringRes;
 import android.support.v13.app.FragmentCompat;
 import android.support.v4.app.ActivityCompat;
@@ -17,6 +19,7 @@ import android.support.v4.content.ContextCompat;
 public class PermissionsHelper {
     private static final String TAG = "PermissionsHelper";
 
+    private static final Handler handler = new Handler(Looper.getMainLooper());
     private static int requestId = 1000;
 
     public static boolean hasPermission(Context context, String permission) {
@@ -54,13 +57,18 @@ public class PermissionsHelper {
         return requestPermission(activity, permission, activity.getString(rationaleText));
     }
 
-    public static int requestPermission(Activity activity, String permission, String rationaleText) {
+    public static int requestPermission(final Activity activity, final String permission, String rationaleText) {
         if (activity instanceof ActivityCompat.OnRequestPermissionsResultCallback) {
             requestId++;
             if (activity.shouldShowRequestPermissionRationale(permission)) {
                 showDialog(activity, permission, rationaleText, requestId);
             } else {
-                activity.requestPermissions(new String[]{permission}, requestId);
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        activity.requestPermissions(new String[]{permission}, requestId);
+                    }
+                });
             }
             return requestId;
         } else {
