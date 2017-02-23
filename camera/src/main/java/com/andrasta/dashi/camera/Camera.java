@@ -223,6 +223,9 @@ public class Camera {
                 }
 
                 this.cameraId = cameraId;
+                if (cameraListener != null) {
+                    cameraListener.onCameraOrientationSet(sensorOrientation);
+                }
                 return;
             }
         } catch (CameraAccessException e) {
@@ -432,6 +435,8 @@ public class Camera {
     };
 
     public interface CameraListener extends ImageReader.OnImageAvailableListener {
+        void onCameraOrientationSet(int orientation);
+
         void onError(boolean critical, @Nullable Exception exception);
     }
 }

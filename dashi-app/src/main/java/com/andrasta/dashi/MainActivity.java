@@ -6,6 +6,7 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.DialogFragment;
 import android.content.DialogInterface;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.media.ImageReader;
 import android.os.Bundle;
@@ -30,12 +31,15 @@ import com.andrasta.dashi.utils.Callback;
 import com.andrasta.dashi.utils.CyclicBuffer;
 import com.andrasta.dashi.utils.PermissionsHelper;
 import com.andrasta.dashi.utils.Preconditions;
+import com.andrasta.dashi.utils.SharedPreferencesHelper;
 import com.andrasta.dashi.view.AutoFitTextureView;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_CAMERA_ROTATION;
 
 public class MainActivity extends AppCompatActivity implements OnRequestPermissionsResultCallback, CameraListener {
     private static final String TAG = "MainActivity";
@@ -46,6 +50,7 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
     private LocationHelper locationHelper = new LocationHelper();
     private CyclicBuffer<String> resultsBuffer = new CyclicBuffer<>(10);
     private ImageSaver imageSaver = new ImageSaver();
+    private SharedPreferencesHelper prefs;
     private AutoFitTextureView textureView;
     private TextView recognitionResult;
     private AlprHandler alprHandler;
@@ -54,6 +59,7 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        setupOrientation();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -76,6 +82,18 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
         alprHandler = new AlprHandler(configDir, alprCallback);
         if (askForPermissions()) {
             afterPermissionsGranted();
+        }
+    }
+
+    private void setupOrientation() {
+        prefs = new SharedPreferencesHelper(this);
+        int orientation = prefs.getInt(KEY_CAMERA_ROTATION, 90);
+        if (orientation == 270) {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE);
+        } else if (orientation == 90) {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        } else {
+            throw new RuntimeException("Camera orientation not supported: " + orientation);
         }
     }
 
@@ -157,6 +175,15 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
             alprHandler.recognize(reader.acquireNextImage());
         } catch (IllegalStateException e) {
             //expected
+        }
+    }
+
+    @Override
+    public void onCameraOrientationSet(int orientation) {
+        if (prefs.getInt(KEY_CAMERA_ROTATION, 90) != orientation) {
+            prefs.setInt(KEY_CAMERA_ROTATION, orientation);
+            finish();
+            startActivity(getIntent());
         }
     }
 
