@@ -8,6 +8,7 @@ import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.os.Handler;
 import android.os.Looper;
+import android.support.annotation.NonNull;
 import android.support.annotation.StringRes;
 import android.support.v13.app.FragmentCompat;
 import android.support.v4.app.ActivityCompat;
@@ -22,11 +23,11 @@ public class PermissionsHelper {
     private static final Handler handler = new Handler(Looper.getMainLooper());
     private static int requestId = 1000;
 
-    public static boolean hasPermission(Context context, String permission) {
+    public static boolean hasPermission(@NonNull Context context, @NonNull String permission) {
         return ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED;
     }
 
-    public static boolean hasPermission(Context context, String... permissions) {
+    public static boolean hasPermission(@NonNull Context context, @NonNull String... permissions) {
         for (String permission : permissions) {
             if (!hasPermission(context, permission)) {
                 return false;
@@ -35,11 +36,11 @@ public class PermissionsHelper {
         return true;
     }
 
-    public static int requestPermission(Fragment fragment, String permission, @StringRes int rationaleText) {
+    public static int requestPermission(@NonNull Fragment fragment, @NonNull String permission, @StringRes int rationaleText) {
         return requestPermission(fragment.getActivity(), permission, rationaleText);
     }
 
-    public static int requestPermission(Fragment fragment, String permission, String rationaleText) {
+    public static int requestPermission(@NonNull Fragment fragment, @NonNull String permission, String rationaleText) {
         if (fragment instanceof FragmentCompat.OnRequestPermissionsResultCallback) {
             requestId++;
             if (fragment.shouldShowRequestPermissionRationale(permission)) {
@@ -53,11 +54,11 @@ public class PermissionsHelper {
         }
     }
 
-    public static int requestPermission(Activity activity, String permission, @StringRes int rationaleText) {
+    public static int requestPermission(@NonNull Activity activity, @NonNull String permission, @StringRes int rationaleText) {
         return requestPermission(activity, permission, activity.getString(rationaleText));
     }
 
-    public static int requestPermission(final Activity activity, final String permission, String rationaleText) {
+    public static int requestPermission(final @NonNull Activity activity, final @NonNull String permission, String rationaleText) {
         if (activity instanceof ActivityCompat.OnRequestPermissionsResultCallback) {
             requestId++;
             if (activity.shouldShowRequestPermissionRationale(permission)) {
@@ -76,7 +77,7 @@ public class PermissionsHelper {
         }
     }
 
-    private static void showDialog(final Activity activity, final String permission, final String text, final int requestId) {
+    private static void showDialog(final @NonNull Activity activity, final @NonNull String permission, final @NonNull String text, final int requestId) {
         new AlertDialog.Builder(activity)
                 .setMessage(text)
                 .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
@@ -95,7 +96,7 @@ public class PermissionsHelper {
                 .show();
     }
 
-    private static void showDialog(final Fragment fragment, final String permission, final String text, final int requestId) {
+    private static void showDialog(final @NonNull Fragment fragment, final @NonNull String permission, final @NonNull String text, final int requestId) {
         new AlertDialog.Builder(fragment.getActivity())
                 .setMessage(text)
                 .setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
