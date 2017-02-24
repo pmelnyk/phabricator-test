@@ -20,6 +20,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.util.Log;
 import android.util.Size;
 import android.view.Display;
 import android.view.Surface;
@@ -173,9 +174,6 @@ public class Camera {
                 // For still image captures, we use the largest available size.
                 Size largest = Collections.max(Arrays.asList(map.getOutputSizes(ImageFormat.YUV_420_888)),
                         CameraUtils.SIZE_COMPARATOR);
-                imageReader = ImageReader.newInstance(largest.getWidth(), largest.getHeight(),
-                        ImageFormat.YUV_420_888, /*maxImages*/1);
-                imageReader.setOnImageAvailableListener(cameraListener, backgroundHandler);
 
                 // Find out if we need to swap dimension to get the preview size relative to sensor
                 // coordinate.
@@ -211,6 +209,10 @@ public class Camera {
                 // garbage capture data.
                 previewSize = CameraUtils.chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class),
                         rotatedPreviewWidth, rotatedPreviewHeight, maxPreviewWidth, maxPreviewHeight, largest);
+                imageReader = ImageReader.newInstance(previewSize.getWidth(), previewSize.getHeight(),
+                        ImageFormat.YUV_420_888, /*maxImages*/ 1);
+                imageReader.setOnImageAvailableListener(cameraListener, backgroundHandler);
+                Log.d(TAG, "Resolution selected " + previewSize.getWidth() + 'x' + previewSize.getHeight());
 
                 // We fit the aspect ratio of TextureView to the size of preview we picked.
                 int orientation = context.getResources().getConfiguration().orientation;

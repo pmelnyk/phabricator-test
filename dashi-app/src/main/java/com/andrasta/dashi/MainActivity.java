@@ -12,6 +12,7 @@ import android.location.Location;
 import android.media.ImageReader;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat.OnRequestPermissionsResultCallback;
@@ -70,6 +71,7 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
     private SharedPreferencesHelper prefs;
     private AutoFitTextureView textureView;
     private TextView recognitionResult;
+    private PolygonView polygonView;
     private AlprHandler alprHandler;
     private Camera camera;
     private int requestId;
@@ -84,6 +86,7 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
         copyAlprConfigToConfigDirectory();
 
         ((DrawerLayout) findViewById(R.id.drawer)).openDrawer(Gravity.LEFT);
+        polygonView = (PolygonView) findViewById(R.id.plate_polygon);
         recognitionResult = (TextView) findViewById(R.id.recognition_result);
         recognitionResult.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -103,7 +106,7 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
         licensePlateMatcher = new LicensePlateMatcher();
         licensePlateMatcher.initialize();
 
-        alprHandler = new AlprHandler(configDir, alprCallback, licensePlateMatcher);
+        alprHandler = new AlprHandler(configDir, alprCallback, licensePlateMatcher, new Handler());
         if (askForPermissions()) {
             afterPermissionsGranted();
         }
@@ -238,11 +241,8 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
             List<Pair<Plate, LicensePlate>> matches = licensePlateMatcher.findMatches(alprResult);
             Log.d(TAG, "Matches found : " + matches.size());
 
-            Plate bestResult = getFirstBestPlate(alprResult);
-            if (bestResult != null) {
-                Log.d(TAG, "Best result: " + bestResult.getPlate());
-                showResult(bestResult);
-            }
+            PlateResult bestResult = getFirstBestPlate(alprResult);
+            showResult(alprResult.getSourceWidth(), alprResult.getSourceHeight(), bestResult);
 
             Location lastKnownLocation = locationHelper.getLastKnownLocation();
 
@@ -251,31 +251,36 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
             }
         }
 
-        private Plate getFirstBestPlate(AlprResult alprResult) {
+        private PlateResult getFirstBestPlate(AlprResult alprResult) {
             List<PlateResult> results = alprResult.getPlates();
             if (results.size() > 0) {
                 PlateResult plate = results.get(0);
                 if (plate != null && plate.getBestPlate() != null) {
-                    return plate.getBestPlate();
+                    return plate;
                 }
             }
             return null;
         }
 
-        private void showResult(Plate plate) {
-            resultsBuffer.add(getResultLine(plate));
+        private void showResult(final int sourceWidth, final int sourceHeight, final PlateResult plate) {
+            if (plate != null) {
+                Log.d(TAG, "Best result: " + plate.getBestPlate().getPlate());
+                resultsBuffer.add(getResultLine(plate.getBestPlate()));
+                polygonView.setAspectRatio(sourceWidth, sourceHeight);
+                polygonView.setPolygon(sourceWidth, sourceHeight, plate.getPlateCoordinates());
+            } else {
+                resultsBuffer.add("");
+                polygonView.setAspectRatio(sourceWidth, sourceHeight);
+                polygonView.clear();
+            }
+
             final StringBuilder sb = new StringBuilder();
             for (String pl : resultsBuffer.asList()) {
                 if (pl != null) {
                     sb.append(pl).append("<br>");
                 }
             }
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    recognitionResult.setText(Html.fromHtml(sb.toString()));
-                }
-            });
+            recognitionResult.setText(Html.fromHtml(sb.toString()));
         }
 
         private String getResultLine(Plate plate) {
@@ -318,7 +323,7 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
 
     private void copyAlprConfigToConfigDirectory() {
 
-        if(!prefs.getBoolean(KEY_ALPR_CONFIG_COPIED, false)) {
+        if (!prefs.getBoolean(KEY_ALPR_CONFIG_COPIED, false)) {
 
             try {
                 InputStream open = getAssets().open(CONFIG_ZIP_FILE_NAME);

@@ -1,7 +1,9 @@
 package com.andrasta.dashi.alpr;
 
 import android.media.Image;
+import android.os.Handler;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.annotation.UiThread;
 import android.util.Log;
 
@@ -32,11 +34,15 @@ public class AlprHandler {
     @NonNull
     private final LicensePlateMatcher licensePlateMatcher;
     private volatile ImageHandler imageHandler;
+    private final Handler callbackHandler;
     private final Alpr alpr;
 
     @UiThread
     public AlprHandler(@NonNull File configDir, @NonNull AlprCallback callback, @NonNull LicensePlateMatcher licensePlateMatcher) {
+        this(configDir, callback, licensePlateMatcher, null);
+    }
 
+    public AlprHandler(@NonNull File configDir, @NonNull AlprCallback callback, @NonNull LicensePlateMatcher licensePlateMatcher, @Nullable Handler callbackHandler) {
         Preconditions.assertParameterNotNull(configDir, "configDir");
         Preconditions.assertParameterNotNull(callback, "callback");
         Preconditions.assertParameterNotNull(licensePlateMatcher, "licensePlateMatcher");
@@ -44,9 +50,9 @@ public class AlprHandler {
         File runtimeDir = new File(configDir, RUNTIME_DIR);
         checkAlprConfiguration(configFile, runtimeDir);
         this.alpr = new Alpr(null, configFile.getAbsolutePath(), runtimeDir.getAbsolutePath());
-        this.callback = callback;
+        this.callbackHandler = callbackHandler;
         this.licensePlateMatcher = licensePlateMatcher;
-
+        this.callback = callback;
     }
 
     private void checkAlprConfiguration(File configFile, File runtimeDir) {
@@ -113,19 +119,27 @@ public class AlprHandler {
 
                     ByteBuffer yBuffer = image.getPlanes()[0].getBuffer(); // Y channel
                     long timestamp = System.currentTimeMillis();
-                    AlprResult result = alpr.recognizeFromByteBuffer(yBuffer, 1, image.getWidth(), image.getHeight());
+                    final AlprResult result = alpr.recognizeFromByteBuffer(yBuffer, 1, image.getWidth(), image.getHeight());
                     long delta = System.currentTimeMillis() - timestamp;
                     Log.w(TAG, "Alpr recognition time: " + delta);
 
-                    byte[] bytes = new byte[0];
-
+                    byte[] bytes = null;
                     if(!licensePlateMatcher.findMatches(result).isEmpty()) {
                         bytes = ImageUtil.imageToJpeg(image);
                     }
 
+                    final byte[] jpeg = bytes;
                     image.close();
-
-                    callback.onComplete(bytes, result);
+                    if (callbackHandler == null) {
+                        callback.onComplete(jpeg, result);
+                    } else {
+                        callbackHandler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                callback.onComplete(jpeg, result);
+                            }
+                        });
+                    }
 
                     if (stop.get()) {
                         break;
