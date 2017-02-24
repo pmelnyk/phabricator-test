@@ -8,12 +8,14 @@ import android.app.DialogFragment;
 import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
+import android.location.Location;
 import android.media.ImageReader;
 import android.os.Bundle;
 import android.os.Environment;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat.OnRequestPermissionsResultCallback;
+import android.support.v4.util.Pair;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
@@ -26,14 +28,16 @@ import com.andrasta.dashi.camera.Camera.CameraListener;
 import com.andrasta.dashi.camera.ImageSaver;
 import com.andrasta.dashi.location.LocationHelper;
 import com.andrasta.dashi.openalpr.AlprResult;
+import com.andrasta.dashi.openalpr.Plate;
 import com.andrasta.dashi.openalpr.PlateResult;
-import com.andrasta.dashi.utils.Callback;
+import com.andrasta.dashi.service.LicensePlateMatcher;
 import com.andrasta.dashi.utils.CyclicBuffer;
 import com.andrasta.dashi.utils.FileUtils;
 import com.andrasta.dashi.utils.PermissionsHelper;
 import com.andrasta.dashi.utils.Preconditions;
 import com.andrasta.dashi.utils.SharedPreferencesHelper;
 import com.andrasta.dashi.view.AutoFitTextureView;
+import com.andrasta.dashiclient.LicensePlate;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -61,6 +65,7 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
     private AlprHandler alprHandler;
     private Camera camera;
     private int requestId;
+    private LicensePlateMatcher licensePlateMatcher;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -86,10 +91,15 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
             }
         });
 
-        alprHandler = new AlprHandler(configDir, alprCallback);
+        licensePlateMatcher = new LicensePlateMatcher();
+        licensePlateMatcher.initialize();
+
+        alprHandler = new AlprHandler(configDir, alprCallback, licensePlateMatcher);
         if (askForPermissions()) {
             afterPermissionsGranted();
         }
+
+
     }
 
     private void setupOrientation() {
@@ -209,41 +219,59 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
         }
     }
 
-    private final Callback<AlprResult, Exception> alprCallback = new Callback<AlprResult, Exception>() {
-        @Override
-        public void onComplete(@NonNull AlprResult alprResult) {
-            Log.d(TAG, "AlprResult: " + alprResult);
-            List<PlateResult> results = alprResult.getPlates();
-            if (results.size() > 0) {
-                PlateResult plate = results.get(0);
-                if (plate != null && plate.getBestPlate() != null) {
-                    String result = plate.getBestPlate().getPlate();
-                    Log.d(TAG, "Best result: " + result);
-                    showResult(result);
-                }
-            }
-        }
-
-        private void showResult(String licensePlate) {
-            resultsBuffer.add(licensePlate);
-            final StringBuilder sb = new StringBuilder();
-            for (String pl : resultsBuffer.asList()) {
-                if (pl != null) {
-                    sb.append(pl).append("\n");
-                }
-            }
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    recognitionResult.setText(sb.toString());
-                }
-            });
-        }
+    private final AlprHandler.AlprCallback alprCallback = new AlprHandler.AlprCallback() {
 
         @Override
         public void onFailure(@NonNull Exception e) {
             throw new RuntimeException(e);
         }
+
+        @Override
+        public void onComplete(byte[] imageAsJpeg, AlprResult alprResult) {
+            Log.d(TAG, "AlprResult: " + alprResult);
+
+            List<Pair<Plate, LicensePlate>> matches = licensePlateMatcher.findMatches(alprResult);
+            Log.d(TAG, "Matches found : " + matches.size());
+
+            showResult(getFirstBestPlate(alprResult));
+
+            Location lastKnownLocation = locationHelper.getLastKnownLocation();
+
+            for (Pair<Plate, LicensePlate> match : matches) {
+                licensePlateMatcher.sendMatch(match, imageAsJpeg, lastKnownLocation);
+            }
+        }
+
+        private Plate getFirstBestPlate(AlprResult alprResult) {
+            List<PlateResult> results = alprResult.getPlates();
+            if (results.size() > 0) {
+                PlateResult plate = results.get(0);
+                if (plate != null && plate.getBestPlate() != null) {
+                    return plate.getBestPlate();
+                }
+            }
+
+            return null;
+        }
+
+        private void showResult(Plate plate) {
+            if (plate != null) {
+                resultsBuffer.add(plate.getPlate());
+                final StringBuilder sb = new StringBuilder();
+                for (String pl : resultsBuffer.asList()) {
+                    if (pl != null) {
+                        sb.append(pl).append("\n");
+                    }
+                }
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        recognitionResult.setText(sb.toString());
+                    }
+                });
+            }
+        }
+
     };
 
     public static class ExitDialog extends DialogFragment {

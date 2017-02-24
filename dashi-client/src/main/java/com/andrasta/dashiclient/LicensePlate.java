@@ -38,4 +38,8 @@ public class LicensePlate {
     public Integer getPriority() {
         return priority;
     }
+
+    public boolean matches(String plateNumber) {
+        return number.equalsIgnoreCase(plateNumber);
+    }
 }

@@ -5,9 +5,10 @@ import android.support.annotation.NonNull;
 import android.support.annotation.UiThread;
 import android.util.Log;
 
+import com.andrasta.dashi.camera.ImageUtil;
 import com.andrasta.dashi.openalpr.Alpr;
 import com.andrasta.dashi.openalpr.AlprResult;
-import com.andrasta.dashi.utils.Callback;
+import com.andrasta.dashi.service.LicensePlateMatcher;
 import com.andrasta.dashi.utils.Preconditions;
 
 import java.io.File;
@@ -27,19 +28,25 @@ public class AlprHandler {
 
     private final ArrayBlockingQueue<Image> imageQueue = new ArrayBlockingQueue<Image>(10);
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final Callback<AlprResult, Exception> callback;
+    private final AlprCallback callback;
+    @NonNull
+    private final LicensePlateMatcher licensePlateMatcher;
     private volatile ImageHandler imageHandler;
     private final Alpr alpr;
 
     @UiThread
-    public AlprHandler(@NonNull File configDir, @NonNull Callback<AlprResult, Exception> callback) {
+    public AlprHandler(@NonNull File configDir, @NonNull AlprCallback callback, @NonNull LicensePlateMatcher licensePlateMatcher) {
+
         Preconditions.assertParameterNotNull(configDir, "configDir");
         Preconditions.assertParameterNotNull(callback, "callback");
+        Preconditions.assertParameterNotNull(licensePlateMatcher, "licensePlateMatcher");
         File configFile = new File(configDir, CONFIG_FILE_NAME);
         File runtimeDir = new File(configDir, RUNTIME_DIR);
         checkAlprConfiguration(configFile, runtimeDir);
         this.alpr = new Alpr(null, configFile.getAbsolutePath(), runtimeDir.getAbsolutePath());
         this.callback = callback;
+        this.licensePlateMatcher = licensePlateMatcher;
+
     }
 
     private void checkAlprConfiguration(File configFile, File runtimeDir) {
@@ -104,13 +111,21 @@ public class AlprHandler {
                         continue;
                     }
 
-                    ByteBuffer byteBuffer = image.getPlanes()[0].getBuffer(); // Y channel
+                    ByteBuffer yBuffer = image.getPlanes()[0].getBuffer(); // Y channel
                     long timestamp = System.currentTimeMillis();
-                    AlprResult result = alpr.recognizeFromByteBuffer(byteBuffer, 1, image.getWidth(), image.getHeight());
+                    AlprResult result = alpr.recognizeFromByteBuffer(yBuffer, 1, image.getWidth(), image.getHeight());
                     long delta = System.currentTimeMillis() - timestamp;
                     Log.w(TAG, "Alpr recognition time: " + delta);
+
+                    byte[] bytes = new byte[0];
+
+                    if(!licensePlateMatcher.findMatches(result).isEmpty()) {
+                        bytes = ImageUtil.imageToJpeg(image);
+                    }
+
                     image.close();
-                    callback.onComplete(result);
+
+                    callback.onComplete(bytes, result);
 
                     if (stop.get()) {
                         break;
@@ -131,5 +146,11 @@ public class AlprHandler {
         void stop() {
             this.stop.set(true);
         }
+    }
+
+    public static interface AlprCallback {
+        void onFailure(Exception failure);
+
+        void onComplete(byte[] bytes, AlprResult result);
     }
 }
