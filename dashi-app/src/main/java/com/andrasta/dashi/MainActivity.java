@@ -16,8 +16,11 @@ import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat.OnRequestPermissionsResultCallback;
 import android.support.v4.util.Pair;
+import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.AppCompatActivity;
+import android.text.Html;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -43,7 +46,10 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_ALPR_CONFIG_COPIED;
@@ -51,13 +57,15 @@ import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_CAMERA_ROTATI
 
 public class MainActivity extends AppCompatActivity implements OnRequestPermissionsResultCallback, CameraListener {
     private static final String TAG = "MainActivity";
-
     private static final String CONFIG_ZIP_FILE_NAME = "alpr_config.zip";
+    private static final int RECOGNITION_HISTORY_SIZE = 10;
+
+    private final SimpleDateFormat dateFormat = new SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault());
     private final File imageDestination = new File(Environment.getExternalStorageDirectory(), "pic.jpg");
     private final AtomicBoolean requestImage = new AtomicBoolean();
     private File configDir;
     private LocationHelper locationHelper = new LocationHelper();
-    private CyclicBuffer<String> resultsBuffer = new CyclicBuffer<>(10);
+    private CyclicBuffer<String> resultsBuffer = new CyclicBuffer<>(RECOGNITION_HISTORY_SIZE);
     private ImageSaver imageSaver = new ImageSaver();
     private SharedPreferencesHelper prefs;
     private AutoFitTextureView textureView;
@@ -75,6 +83,7 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
         configDir = getFilesDir();
         copyAlprConfigToConfigDirectory();
 
+        ((DrawerLayout) findViewById(R.id.drawer)).openDrawer(Gravity.LEFT);
         recognitionResult = (TextView) findViewById(R.id.recognition_result);
         recognitionResult.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -220,11 +229,7 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
     }
 
     private final AlprHandler.AlprCallback alprCallback = new AlprHandler.AlprCallback() {
-
-        @Override
-        public void onFailure(@NonNull Exception e) {
-            throw new RuntimeException(e);
-        }
+        private final Date date = new Date();
 
         @Override
         public void onComplete(byte[] imageAsJpeg, AlprResult alprResult) {
@@ -233,7 +238,11 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
             List<Pair<Plate, LicensePlate>> matches = licensePlateMatcher.findMatches(alprResult);
             Log.d(TAG, "Matches found : " + matches.size());
 
-            showResult(getFirstBestPlate(alprResult));
+            Plate bestResult = getFirstBestPlate(alprResult);
+            if (bestResult != null) {
+                Log.d(TAG, "Best result: " + bestResult.getPlate());
+                showResult(bestResult);
+            }
 
             Location lastKnownLocation = locationHelper.getLastKnownLocation();
 
@@ -250,28 +259,35 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
                     return plate.getBestPlate();
                 }
             }
-
             return null;
         }
 
         private void showResult(Plate plate) {
-            if (plate != null) {
-                resultsBuffer.add(plate.getPlate());
-                final StringBuilder sb = new StringBuilder();
-                for (String pl : resultsBuffer.asList()) {
-                    if (pl != null) {
-                        sb.append(pl).append("\n");
-                    }
+            resultsBuffer.add(getResultLine(plate));
+            final StringBuilder sb = new StringBuilder();
+            for (String pl : resultsBuffer.asList()) {
+                if (pl != null) {
+                    sb.append(pl).append("<br>");
                 }
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        recognitionResult.setText(sb.toString());
-                    }
-                });
             }
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    recognitionResult.setText(Html.fromHtml(sb.toString()));
+                }
+            });
         }
 
+        private String getResultLine(Plate plate) {
+            final String template = "<font color='#FFFFFF'>%s conf: %s%%&nbsp;&nbsp;&nbsp;&nbsp;</font><big><font color='#BBBBFF'>%s</font></big>";
+            date.setTime(System.currentTimeMillis());
+            return String.format(template, dateFormat.format(date), Math.round(plate.getConfidence()), plate.getPlate());
+        }
+
+        @Override
+        public void onFailure(@NonNull Exception e) {
+            throw new RuntimeException(e);
+        }
     };
 
     public static class ExitDialog extends DialogFragment {
