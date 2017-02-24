@@ -6,6 +6,7 @@ import android.support.annotation.NonNull;
 
 public class SharedPreferencesHelper {
     public static final String KEY_CAMERA_ROTATION = "key_camera_rotation";
+    public static final String KEY_ALPR_CONFIG_COPIED = "key_alpr_config_copied";
 
     private final String PREF_NAME = "SharedPreference";
     private final Context context;

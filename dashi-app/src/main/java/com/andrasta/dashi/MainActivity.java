@@ -29,24 +29,29 @@ import com.andrasta.dashi.openalpr.AlprResult;
 import com.andrasta.dashi.openalpr.PlateResult;
 import com.andrasta.dashi.utils.Callback;
 import com.andrasta.dashi.utils.CyclicBuffer;
+import com.andrasta.dashi.utils.FileUtils;
 import com.andrasta.dashi.utils.PermissionsHelper;
 import com.andrasta.dashi.utils.Preconditions;
 import com.andrasta.dashi.utils.SharedPreferencesHelper;
 import com.andrasta.dashi.view.AutoFitTextureView;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_ALPR_CONFIG_COPIED;
 import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_CAMERA_ROTATION;
 
 public class MainActivity extends AppCompatActivity implements OnRequestPermissionsResultCallback, CameraListener {
     private static final String TAG = "MainActivity";
 
+    private static final String CONFIG_ZIP_FILE_NAME = "alpr_config.zip";
     private final File imageDestination = new File(Environment.getExternalStorageDirectory(), "pic.jpg");
     private final AtomicBoolean requestImage = new AtomicBoolean();
-    private final File configDir = new File("/data/local/tmp/");
+    private File configDir;
     private LocationHelper locationHelper = new LocationHelper();
     private CyclicBuffer<String> resultsBuffer = new CyclicBuffer<>(10);
     private ImageSaver imageSaver = new ImageSaver();
@@ -62,6 +67,8 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
         setupOrientation();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        configDir = getFilesDir();
+        copyAlprConfigToConfigDirectory();
 
         recognitionResult = (TextView) findViewById(R.id.recognition_result);
         recognitionResult.setOnClickListener(new View.OnClickListener() {
@@ -262,6 +269,29 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
                         }
                     })
                     .create();
+        }
+    }
+
+    private void copyAlprConfigToConfigDirectory() {
+
+        if(!prefs.getBoolean(KEY_ALPR_CONFIG_COPIED, false)) {
+
+            try {
+                InputStream open = getAssets().open(CONFIG_ZIP_FILE_NAME);
+                File file = new File(configDir, CONFIG_ZIP_FILE_NAME);
+                FileOutputStream fileOutputStream = new FileOutputStream(file);
+
+                FileUtils.copyFile(open, fileOutputStream);
+
+                FileUtils.unzip(file.getAbsolutePath(), file.getParentFile().getAbsolutePath());
+
+                file.delete();
+
+                prefs.setBoolean(KEY_ALPR_CONFIG_COPIED, true);
+
+            } catch (IOException e) {
+                Log.e(TAG, "Error copying alpr config", e);
+            }
         }
     }
 }
