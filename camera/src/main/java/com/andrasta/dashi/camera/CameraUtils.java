@@ -65,6 +65,9 @@ class CameraUtils {
         int w = aspectRatio.getWidth();
         int h = aspectRatio.getHeight();
         for (Size option : choices) {
+            if(skipThisChoice(option)) {
+                continue;
+            }
             if (option.getWidth() <= maxWidth && option.getHeight() <= maxHeight &&
                     option.getHeight() == option.getWidth() * h / w) {
                 if (option.getWidth() >= textureViewWidth &&
@@ -86,6 +89,13 @@ class CameraUtils {
             Log.e(TAG, "Couldn't find any suitable preview size");
             return choices[0];
         }
+    }
+
+    // Workaround for Google Nexus 5x devices
+    // When format is YUV_420_888 and image resolution is 1440x1080
+    // camera responds with trash instead of real image
+    private static boolean skipThisChoice(Size option) {
+        return option.getWidth() == 1440 && option.getHeight() == 1080;
     }
 
     static boolean isSwappedDimensions(int rotation, int orientation) {
