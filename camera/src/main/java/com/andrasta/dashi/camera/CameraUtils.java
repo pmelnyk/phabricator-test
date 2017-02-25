@@ -91,11 +91,13 @@ class CameraUtils {
         }
     }
 
-    // Workaround for Google Nexus 5x devices
+    // Workaround for Google Nexus 5x and Pixel devices
     // When format is YUV_420_888 and image resolution is 1440x1080
     // camera responds with trash instead of real image
     private static boolean skipThisChoice(Size option) {
-        return option.getWidth() == 1440 && option.getHeight() == 1080;
+        return (option.getWidth() == 1440 && option.getHeight() == 1080)
+                || (option.getWidth() == 4048 && option.getHeight() == 3036)
+                || (option.getWidth() == 4000 && option.getHeight() == 3000);
     }
 
     static boolean isSwappedDimensions(int rotation, int orientation) {
