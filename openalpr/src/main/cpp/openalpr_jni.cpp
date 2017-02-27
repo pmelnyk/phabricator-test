@@ -99,6 +99,7 @@ jobject createJPlateResult(JNIEnv *env, const AlprPlateResult& alprPlateResults)
         JEXCEPTION_CHECK(env);
         env->SetObjectArrayElement(jtopNplates, i, jplate);
         JEXCEPTION_CHECK(env);
+        env->DeleteLocalRef(jplate);
     }
 
     jclass pointClass = pointConstructor.getClass(env);
@@ -112,6 +113,7 @@ jobject createJPlateResult(JNIEnv *env, const AlprPlateResult& alprPlateResults)
         JEXCEPTION_CHECK(env);
         env->SetObjectArrayElement(jCoordinates, i, jpoint);
         JEXCEPTION_CHECK(env);
+        env->DeleteLocalRef(jpoint);
     }
 
     return plateResultConstructor.newObject(env, jplate, jtopNplates,
