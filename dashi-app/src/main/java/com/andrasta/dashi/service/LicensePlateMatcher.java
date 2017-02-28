@@ -9,6 +9,7 @@ import com.andrasta.dashi.openalpr.AlprResult;
 import com.andrasta.dashi.openalpr.Plate;
 import com.andrasta.dashi.openalpr.PlateResult;
 import com.andrasta.dashi.utils.Preconditions;
+import com.andrasta.dashi.utils.SharedPreferencesHelper;
 import com.andrasta.dashiclient.LicensePlate;
 
 import java.util.ArrayList;
@@ -29,6 +30,12 @@ public class LicensePlateMatcher {
     private static final String TAG = "LicensePlateMatcher";
     private List<LicensePlate> licensePlates = new ArrayList<>();
     private static final float CONFIDENCE_THRESHOLD = 80.0f;
+    private final SharedPreferencesHelper sharedPreferencesHelper;
+
+    public LicensePlateMatcher(@NonNull SharedPreferencesHelper sharedPreferencesHelper) {
+        Preconditions.assertParameterNotNull(sharedPreferencesHelper, "sharedPreferencesHelper");
+        this.sharedPreferencesHelper = sharedPreferencesHelper;
+    }
 
     public void initialize(){
 
@@ -52,6 +59,13 @@ public class LicensePlateMatcher {
     }
 
     private Pair<Plate, LicensePlate> findMatches(@NonNull Plate plate) {
+
+        long plateFoundAlready = sharedPreferencesHelper.getLong(plate.getPlate(), -1);
+
+        if(plateFoundAlready != -1) {
+            return null;
+        }
+
         for (LicensePlate licensePlate : licensePlates) {
             if (licensePlate.matches(plate.getPlate()) && plate.getConfidence() > CONFIDENCE_THRESHOLD) {
                 return new Pair<>(plate, licensePlate);
@@ -80,7 +94,7 @@ public class LicensePlateMatcher {
         return plateMatches;
     }
 
-    public void sendMatch(@NonNull Pair<Plate, LicensePlate> matchingPlatePair, @NonNull byte[] imageAsJpeg, Location lastKnownLocation) {
+    public void sendMatch(@NonNull final Pair<Plate, LicensePlate> matchingPlatePair, @NonNull byte[] imageAsJpeg, Location lastKnownLocation) {
 
         Preconditions.assertParameterNotNull(matchingPlatePair, "matchingPlatePair");
         Preconditions.assertParameterNotNull(imageAsJpeg, "imageAsJpeg");
@@ -127,6 +141,7 @@ public class LicensePlateMatcher {
             public void onResponse(Call<ResponseBody> call,
                                    Response<ResponseBody> response) {
                 Log.v("Upload", "success");
+                sharedPreferencesHelper.setLong(matchingPlatePair.first.getPlate(), System.currentTimeMillis());
             }
 
             @Override

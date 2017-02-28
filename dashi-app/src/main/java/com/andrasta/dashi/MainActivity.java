@@ -103,7 +103,7 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
             }
         });
 
-        licensePlateMatcher = new LicensePlateMatcher();
+        licensePlateMatcher = new LicensePlateMatcher(prefs);
         licensePlateMatcher.initialize();
 
         alprHandler = new AlprHandler(configDir, alprCallback, licensePlateMatcher, new Handler());

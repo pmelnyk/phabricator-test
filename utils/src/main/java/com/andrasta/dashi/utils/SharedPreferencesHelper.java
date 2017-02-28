@@ -30,7 +30,7 @@ public class SharedPreferencesHelper {
     }
 
     /**
-     * Set a integer shared preference
+     * Set an integer shared preference
      *
      * @param key   - Key to set shared preference
      * @param value - Value for the key
@@ -39,6 +39,19 @@ public class SharedPreferencesHelper {
         SharedPreferences settings = context.getSharedPreferences(PREF_NAME, 0);
         SharedPreferences.Editor editor = settings.edit();
         editor.putInt(key, value);
+        editor.apply();
+    }
+
+    /**
+     * Set a long shared preference
+     *
+     * @param key   - Key to set shared preference
+     * @param value - Value for the key
+     */
+    public void setLong(@NonNull String key, long value) {
+        SharedPreferences settings = context.getSharedPreferences(PREF_NAME, 0);
+        SharedPreferences.Editor editor = settings.edit();
+        editor.putLong(key, value);
         editor.apply();
     }
 
@@ -68,7 +81,7 @@ public class SharedPreferencesHelper {
     }
 
     /**
-     * Get a integer shared preference
+     * Get an integer shared preference
      *
      * @param key      - Key to look up in shared preferences.
      * @param defValue - Default value to be returned if shared preference isn't found.
@@ -77,6 +90,17 @@ public class SharedPreferencesHelper {
     public int getInt(@NonNull String key, int defValue) {
         SharedPreferences settings = context.getSharedPreferences(PREF_NAME, 0);
         return settings.getInt(key, defValue);
+    }
+
+    /**
+     * Get a integer shared preference
+     *
+     * @param key      - Key to look up in shared preferences.
+     * @param defValue - Default value to be returned if shared preference isn't found.
+     */
+    public long getLong(@NonNull String key, long defValue) {
+        SharedPreferences settings = context.getSharedPreferences(PREF_NAME, 0);
+        return settings.getLong(key, defValue);
     }
 
     /**
