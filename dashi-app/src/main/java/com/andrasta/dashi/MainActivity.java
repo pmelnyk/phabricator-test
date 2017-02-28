@@ -6,41 +6,31 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.DialogFragment;
 import android.content.DialogInterface;
-import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.media.ImageReader;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat.OnRequestPermissionsResultCallback;
 import android.support.v4.util.Pair;
-import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.AppCompatActivity;
-import android.text.Html;
 import android.util.Log;
-import android.view.Gravity;
-import android.view.View;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import com.andrasta.dashi.alpr.AlprHandler;
 import com.andrasta.dashi.camera.Camera;
 import com.andrasta.dashi.camera.Camera.CameraListener;
-import com.andrasta.dashi.camera.ImageSaver;
 import com.andrasta.dashi.location.LocationHelper;
 import com.andrasta.dashi.openalpr.AlprResult;
 import com.andrasta.dashi.openalpr.Plate;
 import com.andrasta.dashi.openalpr.PlateResult;
 import com.andrasta.dashi.service.LicensePlateMatcher;
-import com.andrasta.dashi.utils.CyclicBuffer;
 import com.andrasta.dashi.utils.FileUtils;
 import com.andrasta.dashi.utils.PermissionsHelper;
 import com.andrasta.dashi.utils.Preconditions;
 import com.andrasta.dashi.utils.SharedPreferencesHelper;
-import com.andrasta.dashi.view.AutoFitTextureView;
 import com.andrasta.dashiclient.LicensePlate;
 
 import java.io.File;
@@ -51,27 +41,18 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_ALPR_CONFIG_COPIED;
-import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_CAMERA_ROTATION;
 
 public class MainActivity extends AppCompatActivity implements OnRequestPermissionsResultCallback, CameraListener {
     private static final String TAG = "MainActivity";
     private static final String CONFIG_ZIP_FILE_NAME = "alpr_config.zip";
-    private static final int RECOGNITION_HISTORY_SIZE = 10;
 
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault());
-    private final File imageDestination = new File(Environment.getExternalStorageDirectory(), "pic.jpg");
-    private final AtomicBoolean requestImage = new AtomicBoolean();
     private File configDir;
     private LocationHelper locationHelper = new LocationHelper();
-    private CyclicBuffer<String> resultsBuffer = new CyclicBuffer<>(RECOGNITION_HISTORY_SIZE);
-    private ImageSaver imageSaver = new ImageSaver();
     private SharedPreferencesHelper prefs;
-    private AutoFitTextureView textureView;
-    private TextView recognitionResult;
-    private PolygonView polygonView;
+
     private AlprHandler alprHandler;
     private Camera camera;
     private int requestId;
@@ -79,29 +60,11 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        setupOrientation();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         configDir = getFilesDir();
+        prefs = new SharedPreferencesHelper(getApplicationContext());
         copyAlprConfigToConfigDirectory();
-
-        ((DrawerLayout) findViewById(R.id.drawer)).openDrawer(Gravity.LEFT);
-        polygonView = (PolygonView) findViewById(R.id.plate_polygon);
-        recognitionResult = (TextView) findViewById(R.id.recognition_result);
-        recognitionResult.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                resultsBuffer.reset();
-                recognitionResult.setText("");
-            }
-        });
-        textureView = (AutoFitTextureView) findViewById(R.id.texture);
-        textureView.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                requestImage.set(true);
-            }
-        });
 
         licensePlateMatcher = new LicensePlateMatcher();
         licensePlateMatcher.initialize();
@@ -112,18 +75,6 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
         }
 
 
-    }
-
-    private void setupOrientation() {
-        prefs = new SharedPreferencesHelper(this);
-        int orientation = prefs.getInt(KEY_CAMERA_ROTATION, 90);
-        if (orientation == 270) {
-            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE);
-        } else if (orientation == 90) {
-            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
-        } else {
-            throw new RuntimeException("Camera orientation not supported: " + orientation);
-        }
     }
 
     private boolean askForPermissions() {
@@ -183,7 +134,7 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
     }
 
     private void afterPermissionsGranted() {
-        camera = new Camera(textureView, this);
+        camera = new Camera(this, this);
         try {
             locationHelper.start(this);
         } catch (IOException ioe) {
@@ -194,11 +145,6 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
     @Override
     public void onImageAvailable(@NonNull ImageReader reader) {
         Preconditions.assertParameterNotNull(reader, "reader");
-        if (requestImage.getAndSet(false)) {
-            imageSaver.saveToFile(reader.acquireNextImage(), imageDestination);
-            Toast.makeText(this, "Image saved to " + imageDestination.getAbsolutePath(), Toast.LENGTH_SHORT).show();
-            return;
-        }
 
         try {
             alprHandler.recognize(reader.acquireNextImage());
@@ -209,11 +155,7 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
 
     @Override
     public void onCameraOrientationSet(int orientation) {
-        if (prefs.getInt(KEY_CAMERA_ROTATION, 90) != orientation) {
-            prefs.setInt(KEY_CAMERA_ROTATION, orientation);
-            finish();
-            startActivity(getIntent());
-        }
+
     }
 
     @Override
@@ -242,8 +184,6 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
             Log.d(TAG, "Matches found : " + matches.size());
 
             PlateResult bestResult = getFirstBestPlate(alprResult);
-            showResult(alprResult.getSourceWidth(), alprResult.getSourceHeight(), bestResult);
-
             Location lastKnownLocation = locationHelper.getLastKnownLocation();
 
             for (Pair<Plate, LicensePlate> match : matches) {
@@ -260,33 +200,6 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
                 }
             }
             return null;
-        }
-
-        private void showResult(final int sourceWidth, final int sourceHeight, final PlateResult plate) {
-            if (plate != null) {
-                Log.d(TAG, "Best result: " + plate.getBestPlate().getPlate());
-                resultsBuffer.add(getResultLine(plate.getBestPlate()));
-                polygonView.setAspectRatio(sourceWidth, sourceHeight);
-                polygonView.setPolygon(sourceWidth, sourceHeight, plate.getPlateCoordinates());
-            } else {
-                resultsBuffer.add("");
-                polygonView.setAspectRatio(sourceWidth, sourceHeight);
-                polygonView.clear();
-            }
-
-            final StringBuilder sb = new StringBuilder();
-            for (String pl : resultsBuffer.asList()) {
-                if (pl != null) {
-                    sb.append(pl).append("<br>");
-                }
-            }
-            recognitionResult.setText(Html.fromHtml(sb.toString()));
-        }
-
-        private String getResultLine(Plate plate) {
-            final String template = "<font color='#FFFFFF'>%s conf: %s%%&nbsp;&nbsp;&nbsp;&nbsp;</font><big><font color='#BBBBFF'>%s</font></big>";
-            date.setTime(System.currentTimeMillis());
-            return String.format(template, dateFormat.format(date), Math.round(plate.getConfidence()), plate.getPlate());
         }
 
         @Override
