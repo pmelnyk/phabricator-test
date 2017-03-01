@@ -26,10 +26,8 @@ import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_APP_INITIALIZ
 
 public class SplashActivity extends Activity implements OnRequestPermissionsResultCallback {
     private static final String TAG = "SplashActivity";
-    private static final int COMPLETE_COUNTER = 2;
 
     private SharedPreferencesHelper prefs;
-    private int initComplete;
     private int requestId;
 
     @Override
@@ -39,22 +37,20 @@ public class SplashActivity extends Activity implements OnRequestPermissionsResu
 
         prefs = new SharedPreferencesHelper(getApplicationContext());
         if (prefs.getBoolean(KEY_APP_INITIALIZED, false)) {
-            initComplete = COMPLETE_COUNTER;
-            checkAndExit();
+            Log.d(TAG, "App initialized already");
+            startMainActivity();
             return;
         }
 
-        new AlprConfigCopierTask(this, getFilesDir(), prefs).execute();
-        LicensePlateMatcher.getInstance(prefs).initialize();
+        Log.d(TAG, "App isn't initialized. Request permissions.");
         askForPermissions();
     }
 
-    private void checkAndExit() {
-        if (++initComplete >= COMPLETE_COUNTER) {
-            prefs.setBoolean(KEY_APP_INITIALIZED, true);
-            startActivity(new Intent(this, MainActivity.class));
-            finish();
-        }
+    private void startMainActivity() {
+        Log.d(TAG, "Start main activity");
+        prefs.setBoolean(KEY_APP_INITIALIZED, true);
+        startActivity(new Intent(this, MainActivity.class));
+        finish();
     }
 
     private boolean askForPermissions() {
@@ -87,23 +83,23 @@ public class SplashActivity extends Activity implements OnRequestPermissionsResu
             if (grantResults.length != 1 || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
                 MainActivity.ExitDialog.newInstance(getString(R.string.permission_discard)).show(getFragmentManager(), "Dialog");
             } else {
-                checkAndExit();
+                Log.d(TAG, "All permissions granted");
+                LicensePlateMatcher.getInstance(prefs).initialize();
+                new AlprConfigCopierTask(this, getFilesDir(), prefs).execute();
             }
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
     }
 
-
     private static final class AlprConfigCopierTask extends AsyncTask<Void, Void, Void> {
-
         private static final String CONFIG_ZIP_FILE_NAME = "alpr_config.zip";
         private final AssetManager assetManager;
         private final File configDir;
         private final SharedPreferencesHelper prefs;
         private SplashActivity activity;
 
-        public AlprConfigCopierTask(@NonNull SplashActivity activity, @NonNull File configDir, @NonNull SharedPreferencesHelper prefs) {
+        AlprConfigCopierTask(@NonNull SplashActivity activity, @NonNull File configDir, @NonNull SharedPreferencesHelper prefs) {
             this.assetManager = activity.getAssets();
             this.activity = activity;
             this.configDir = configDir;
@@ -124,6 +120,7 @@ public class SplashActivity extends Activity implements OnRequestPermissionsResu
 
                     FileUtils.unzip(file.getAbsolutePath(), file.getParentFile().getAbsolutePath());
 
+                    //noinspection ResultOfMethodCallIgnored
                     file.delete();
 
                     prefs.setBoolean(KEY_ALPR_CONFIG_COPIED, true);
@@ -139,7 +136,8 @@ public class SplashActivity extends Activity implements OnRequestPermissionsResu
         @Override
         protected void onPostExecute(Void aVoid) {
             if (activity != null) {
-                activity.checkAndExit();
+                Log.d(TAG, "Alpr config copied");
+                activity.startMainActivity();
             }
         }
     }
