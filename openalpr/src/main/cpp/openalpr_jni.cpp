@@ -1,7 +1,8 @@
 #include <jni.h>
 #include <string>
+#include <android/log.h>
 #include "alpr.h"
-#include "utils.h"
+#include "utils_jni.h"
 #include "opencv/cv.h"
 #include "opencv/highgui.h"
 #include "opencv2/highgui/highgui.hpp"
@@ -22,18 +23,35 @@ static Alpr* getAlpr(JNIEnv *env, jlong nativeReference) {
 
 extern "C" {
 
+#define TAG "ALPR_JNI"
+
 JNIEXPORT jlong JNICALL
 Java_com_andrasta_dashi_openalpr_Alpr_nCreate(JNIEnv *env, jclass type, jstring country_jstring,
                                               jstring config_jstring,
                                               jstring runtimeDir_jstring) {
+    //foo();
+    __android_log_write(ANDROID_LOG_WARN, TAG, "here1");
     start_logger();
-    std::string country = string_from_jstring(env, country_jstring);
-    if (country.empty()) {
-        country = "us";
-    }
+    __android_log_write(ANDROID_LOG_WARN, TAG, "here2");
+    __android_log_write(ANDROID_LOG_WARN, TAG, "here6");
     std::string config = string_from_jstring(env, config_jstring);
+    __android_log_write(ANDROID_LOG_WARN, TAG, "here7");
+    __android_log_write(ANDROID_LOG_WARN, TAG, config.c_str());
     std::string runtimeDir = string_from_jstring(env, runtimeDir_jstring);
+    __android_log_write(ANDROID_LOG_WARN, TAG, "here8");
+    std::string country = string_from_jstring(env, country_jstring);
+    __android_log_write(ANDROID_LOG_WARN, TAG, "herexx");
+    country = "us";
+    __android_log_write(ANDROID_LOG_WARN, TAG, "here3");
+    if (country.empty()) {
+        __android_log_write(ANDROID_LOG_WARN, TAG, "here4");
+        __android_log_write(ANDROID_LOG_WARN, TAG, country.c_str());
+        country = std::string("us");
+        __android_log_write(ANDROID_LOG_WARN, TAG, "here5");
+    }
+
     Alpr *alpr = new Alpr(country, config, runtimeDir);
+    __android_log_write(ANDROID_LOG_WARN, TAG, "here8");
     return (jlong) alpr;
 }
 

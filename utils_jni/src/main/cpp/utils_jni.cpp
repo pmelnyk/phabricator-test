@@ -1,4 +1,4 @@
-#include "utils.h"
+#include "utils_jni.h"
 #include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -12,13 +12,14 @@
 
 
 std::string string_from_jstring(JNIEnv* env, jstring java_string) {
+    //foo();
     if (java_string) {
         const char *chars = env->GetStringUTFChars(java_string, NULL);
         std::string string(chars);
         env->ReleaseStringUTFChars(java_string, chars);
         return string;
     } else {
-        return std::string();
+        return std::string("");
     }
 }
 

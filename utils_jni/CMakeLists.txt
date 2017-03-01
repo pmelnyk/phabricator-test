@@ -11,50 +11,35 @@ SET(CMAKE_VERBOSE_MAKEFILE "ON")
 # You can define multiple libraries, and CMake builds it for you.
 # Gradle automatically packages shared libraries with your APK.
 
-set(openalpr_dir ${CMAKE_SOURCE_DIR}/jni_openalpr/${ANDROID_ABI})
-set(utils_jni_dir ${CMAKE_SOURCE_DIR}/../utils_jni)
-
-# utils_jni
-add_library(lib_utils_jni STATIC IMPORTED)
-set_target_properties(lib_utils_jni PROPERTIES IMPORTED_LOCATION ${utils_jni_dir}/build/intermediates/cmake/release/obj/${ANDROID_ABI}/libutils_jni.a)
-
-# alpr
-add_library(lib_openalpr SHARED IMPORTED)
-set_target_properties(lib_openalpr PROPERTIES IMPORTED_LOCATION ${openalpr_dir}/libopenalpr.so)
-
 find_library(libz z)
 find_library(liblog log)
-
 
 set(src src/main/cpp/)
 
 add_library( # Sets the name of the library.
-             openalpr_jni
+             utils_jni
 
-             # Sets the library as a shared library.cd ..
-             SHARED
+             # Sets the library as a shared library.
+             STATIC
 
              # Provides a relative path to your source file(s).
              # Associated headers in the same location as their source
              # file are automatically included.
-             ${src}/openalpr_jni.cpp )
+             ${src}/utils_jni.cpp
+             )
 
+
+set_target_properties(utils_jni
+                      PROPERTIES
+                      LIBRARY_OUTPUT_DIRECTORY
+                      "${distribution_DIR}/lib/${ANDROID_ABI}")
 
 # Specifies libraries CMake should link to your target library. You
 # can link multiple libraries, such as libraries you define in the
 # build script, prebuilt third-party libraries, or system libraries.
 
 
-target_include_directories(openalpr_jni PRIVATE
-                           ${CMAKE_SOURCE_DIR}/include/openalpr
-                           ${CMAKE_SOURCE_DIR}/include/tesseract
-                           ${CMAKE_SOURCE_DIR}/include/opencv
-                           ${utils_jni_dir}/src/main/cpp)
-
 target_link_libraries( # Specifies the target library.
-                       openalpr_jni
-                       lib_utils_jni
-                       lib_openalpr
-                       ${libz}
+                       utils_jni
                        ${liblog}
                        )
