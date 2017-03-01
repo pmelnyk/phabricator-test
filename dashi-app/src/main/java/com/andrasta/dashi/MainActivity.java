@@ -1,13 +1,11 @@
 package com.andrasta.dashi;
 
-import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.DialogFragment;
 import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
-import android.content.pm.PackageManager;
 import android.location.Location;
 import android.media.ImageReader;
 import android.os.Bundle;
@@ -15,7 +13,6 @@ import android.os.Environment;
 import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.support.v4.app.ActivityCompat.OnRequestPermissionsResultCallback;
 import android.support.v4.util.Pair;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.AppCompatActivity;
@@ -36,10 +33,10 @@ import com.andrasta.dashi.openalpr.Plate;
 import com.andrasta.dashi.openalpr.PlateResult;
 import com.andrasta.dashi.service.LicensePlateMatcher;
 import com.andrasta.dashi.utils.CyclicBuffer;
-import com.andrasta.dashi.utils.PermissionsHelper;
 import com.andrasta.dashi.utils.Preconditions;
 import com.andrasta.dashi.utils.SharedPreferencesHelper;
 import com.andrasta.dashi.view.AutoFitTextureView;
+import com.andrasta.dashi.view.PolygonView;
 import com.andrasta.dashiclient.LicensePlate;
 
 import org.tensorflow.TensorFlowException;
@@ -55,7 +52,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_CAMERA_ROTATION;
 
-public class MainActivity extends AppCompatActivity implements OnRequestPermissionsResultCallback, CameraListener {
+public class MainActivity extends AppCompatActivity implements CameraListener {
     private static final String TAG = "MainActivity";
     private static final String CONFIG_ZIP_FILE_NAME = "alpr_config.zip";
     private static final int RECOGNITION_HISTORY_SIZE = 10;
@@ -106,8 +103,11 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
         licensePlateMatcher = LicensePlateMatcher.getInstance(prefs);
 
         alprHandler = new AlprHandler(configDir, alprCallback, licensePlateMatcher, new Handler());
-        if (askForPermissions()) {
-            afterPermissionsGranted();
+        camera = new Camera(textureView, this);
+        try {
+            locationHelper.start(this);
+        } catch (IOException ioe) {
+            Log.d(TAG, "Cannot start location", ioe);
         }
     }
 
@@ -120,26 +120,6 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
         } else {
             throw new RuntimeException("Camera orientation not supported: " + orientation);
         }
-    }
-
-    private boolean askForPermissions() {
-        if (!PermissionsHelper.hasPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
-            requestId = PermissionsHelper.requestPermission(this, Manifest.permission.ACCESS_FINE_LOCATION, R.string.location_permission_rationale);
-            return false;
-        }
-        if (!PermissionsHelper.hasPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)) {
-            requestId = PermissionsHelper.requestPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION, R.string.location_permission_rationale);
-            return false;
-        }
-        if (!PermissionsHelper.hasPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-            requestId = PermissionsHelper.requestPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE, R.string.storage_permission_rationale);
-            return false;
-        }
-        if (!PermissionsHelper.hasPermission(this, Manifest.permission.CAMERA)) {
-            requestId = PermissionsHelper.requestPermission(this, Manifest.permission.CAMERA, R.string.camera_permission_rationale);
-            return false;
-        }
-        return true;
     }
 
     @Override
@@ -158,33 +138,6 @@ public class MainActivity extends AppCompatActivity implements OnRequestPermissi
             camera.close();
         }
         super.onPause();
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        if (requestCode == requestId) {
-            if (!askForPermissions()) {
-                return;
-            }
-
-            if (grantResults.length != 1 || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
-                ExitDialog.newInstance(getString(R.string.permission_discard)).show(getFragmentManager(), "Dialog");
-            } else {
-                afterPermissionsGranted();
-                camera.open();
-            }
-        } else {
-            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        }
-    }
-
-    private void afterPermissionsGranted() {
-        camera = new Camera(textureView, this);
-        try {
-            locationHelper.start(this);
-        } catch (IOException ioe) {
-            Log.d(TAG, "Cannot start location", ioe);
-        }
     }
 
     @Override

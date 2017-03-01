@@ -1,4 +1,4 @@
-package com.andrasta.dashi;
+package com.andrasta.dashi.view;
 
 import android.content.Context;
 import android.graphics.Canvas;

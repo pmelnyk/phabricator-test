@@ -21,7 +21,7 @@
             android:layout_height="match_parent"
             android:layout_gravity="center_horizontal|center_vertical"/>
 
-        <com.andrasta.dashi.PolygonView
+        <com.andrasta.dashi.view.PolygonView
             android:id="@+id/plate_polygon"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
