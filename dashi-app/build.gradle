@@ -46,4 +46,5 @@ dependencies {
     compile project(":dashi-client")
     compile project(':openalpr')
     compile project(':utils')
+    compile project(':tensorflow')
 }

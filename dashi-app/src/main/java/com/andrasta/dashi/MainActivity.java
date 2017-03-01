@@ -42,6 +42,9 @@ import com.andrasta.dashi.utils.SharedPreferencesHelper;
 import com.andrasta.dashi.view.AutoFitTextureView;
 import com.andrasta.dashiclient.LicensePlate;
 
+import org.tensorflow.TensorFlowException;
+import org.tensorflow.contrib.android.TensorFlowInferenceInterface;
+
 import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
