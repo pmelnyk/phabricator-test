@@ -32,9 +32,20 @@ public class LicensePlateMatcher {
     private static final float CONFIDENCE_THRESHOLD = 80.0f;
     private final SharedPreferencesHelper sharedPreferencesHelper;
 
-    public LicensePlateMatcher(@NonNull SharedPreferencesHelper sharedPreferencesHelper) {
+    private LicensePlateMatcher(@NonNull SharedPreferencesHelper sharedPreferencesHelper) {
         Preconditions.assertParameterNotNull(sharedPreferencesHelper, "sharedPreferencesHelper");
         this.sharedPreferencesHelper = sharedPreferencesHelper;
+    }
+
+    private static LicensePlateMatcher INSTANCE;
+
+    public static synchronized LicensePlateMatcher getInstance(SharedPreferencesHelper sharedPreferencesHelper) {
+
+        if(INSTANCE == null) {
+            INSTANCE = new LicensePlateMatcher(sharedPreferencesHelper);
+        }
+
+        return INSTANCE;
     }
 
     public void initialize(){
