@@ -15,10 +15,10 @@ android {
         externalNativeBuild {
             cmake {
                 abiFilters "armeabi-v7a"
-                arguments
+                arguments = [
                         '-DCMAKE_VERBOSE_MAKEFILE:BOOL=ON'
-
-
+                        ]
+                cppFlags "-std=c++14"
             }
         }
 

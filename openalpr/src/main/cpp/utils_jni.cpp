@@ -1,9 +1,6 @@
-#include "utils.h"
-#include <stdio.h>
-#include <sys/types.h>
+#include "utils_jni.h"
 #include <unistd.h>
 #include <android/log.h>
-#include <pthread.h>
 #include <iostream>
 
 //
@@ -11,10 +8,12 @@
 //
 
 
-std::string string_from_jstring(JNIEnv* env, jstring java_string) {
+using namespace dashi::jni;
+
+std::string JUtils::stringFromJstring(JNIEnv *env, jstring java_string) {
     if (java_string) {
-        const char *chars = env->GetStringUTFChars(java_string, NULL);
-        std::string string(chars);
+        auto chars = env->GetStringUTFChars(java_string, NULL);
+        auto string = std::string(chars);
         env->ReleaseStringUTFChars(java_string, chars);
         return string;
     } else {
@@ -22,26 +21,25 @@ std::string string_from_jstring(JNIEnv* env, jstring java_string) {
     }
 }
 
-jstring jstring_from_string(JNIEnv* env, std::string string) {
+jstring JUtils::jstringFromString(JNIEnv *env, std::string string) {
     return env->NewStringUTF(string.c_str());
 }
 
 
 
-void throwRuntimeException(JNIEnv *env, std::string message) {
-    jclass exClass;
-    const char *className = "java/lang/RuntimeException";
-    jclass clazz = env->FindClass(className);
+void JUtils::throwRuntimeException(JNIEnv *env, std::string message) {
+    auto *className = "java/lang/RuntimeException";
+    auto clazz = env->FindClass(className);
     if (! clazz) {
         env->ThrowNew(clazz, message.c_str());
     }
 }
 
 
-jclass find_class(JNIEnv* env, const char* className) {
-    jclass clazz = env->FindClass(className);
+jclass JUtils::findClass(JNIEnv *env, const char *className) {
+    auto clazz = env->FindClass(className);
     if (! clazz) {
-        std::string message = std::string("Cannot find class: ") + className;
+        auto message = std::string("Cannot find class: ") + className;
         throwRuntimeException(env, message);
     }
     return clazz;
@@ -50,12 +48,13 @@ jclass find_class(JNIEnv* env, const char* className) {
 
 
 
-jmethodID find_method(JNIEnv* env, jclass clazz, const char* methodName, const char* signature) {
+jmethodID JUtils::findMethod(JNIEnv *env, jclass clazz, const char *methodName,
+                             const char *signature) {
     jmethodID methodID = 0;
     if (! env->ExceptionCheck()) {
         methodID = env->GetMethodID(clazz, methodName, signature);
         if (! methodID) {
-            std::string message = std::string("Cannot find constructor: ") + signature;
+            auto message = std::string("Cannot find constructor: ") + signature;
             throwRuntimeException(env, message);
         }
     }
@@ -63,16 +62,16 @@ jmethodID find_method(JNIEnv* env, jclass clazz, const char* methodName, const c
 }
 
 
-
-jmethodID find_constructor(JNIEnv* env, jclass clazz, const char* signature) {
-    return find_method(env, clazz, "<init>", signature);
+static const char* CONSTRUCTOR_METHOD_NAME = "<init>";
+jmethodID JUtils::findConstructor(JNIEnv *env, jclass clazz, const char *signature) {
+    return findMethod(env, clazz, CONSTRUCTOR_METHOD_NAME, signature);
 }
 
 
-jobject create_object(JNIEnv *env, jclass clazz, jmethodID constructor, ...) {
+jobject JUtils::createObject(JNIEnv *env, jclass clazz, jmethodID constructor, ...) {
     va_list args;
     va_start(args, constructor);
-    jobject createdObject = env->NewObjectV(clazz, constructor, args);
+    auto createdObject = env->NewObjectV(clazz, constructor, args);
     va_end(args);
     return createdObject;
 }
@@ -80,11 +79,11 @@ jobject create_object(JNIEnv *env, jclass clazz, jmethodID constructor, ...) {
 
 static const char* TO_STRING_METHOD_NAME = "toString";
 static const char* TO_STRING_METHOD_SIGNATURE = "()Ljava/lang/String;";
-std::string call_toString(JNIEnv *env, jobject object) {
-    jclass clazz = env->GetObjectClass(object);
-    jmethodID methodId = find_method(env, clazz, TO_STRING_METHOD_NAME, TO_STRING_METHOD_SIGNATURE);
-    jstring result = (jstring)env->CallObjectMethod(object, methodId);
-    return string_from_jstring(env, result);
+std::string JUtils::callToString(JNIEnv *env, jobject object) {
+    auto clazz = env->GetObjectClass(object);
+    auto methodId = findMethod(env, clazz, TO_STRING_METHOD_NAME, TO_STRING_METHOD_SIGNATURE);
+    auto result = (jstring)env->CallObjectMethod(object, methodId);
+    return stringFromJstring(env, result);
 }
 
 // constructor class
@@ -99,7 +98,7 @@ JConstructor::JConstructor(const char* className, const char* signature) {
 
 jclass JConstructor::getClass(JNIEnv* env) {
     if (! _clazz) {
-        jclass clazz = find_class(env, _className);
+        jclass clazz = JUtils::findClass(env, _className);
         JEXCEPTION_CHECK(env);
         _clazz = (jclass)env->NewGlobalRef(clazz);
     }
@@ -108,15 +107,15 @@ jclass JConstructor::getClass(JNIEnv* env) {
 
 
 jobject JConstructor::newObject(JNIEnv* env, ...) {
-    jclass clazz = getClass(env);
+    auto clazz = getClass(env);
     JEXCEPTION_CHECK(env);
     if (! _methodId) {
-        _methodId = find_constructor(env, _clazz, _signature);
+        _methodId = JUtils::findConstructor(env, _clazz, _signature);
         JEXCEPTION_CHECK(env);
     }
     va_list args;
     va_start(args, env);
-    jobject createdObject = env->NewObjectV(_clazz, _methodId, args);
+    auto createdObject = env->NewObjectV(_clazz, _methodId, args);
     va_end(args);
     return createdObject;
 }
@@ -142,7 +141,7 @@ static void *thread_func(void*)
 }
 
 
-int start_logger()
+int ALog::startLogger()
 {
 
     /* make stdout line-buffered and stderr unbuffered */
