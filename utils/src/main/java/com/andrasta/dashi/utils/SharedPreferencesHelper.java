@@ -3,11 +3,13 @@ package com.andrasta.dashi.utils;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 
 public class SharedPreferencesHelper {
     public static final String KEY_CAMERA_ROTATION = "key_camera_rotation";
     public static final String KEY_ALPR_CONFIG_COPIED = "key_alpr_config_copied";
-    public static final String KEY_APP_INITIALIZED = "key_app_initialized";
+    public static final String KEY_ALPR_CONFIG_DIR = "key_alpr_config_dir";
+    public static final String KEY_APP_INITIALIZED = "key_app_initialized2";
 
     private final String PREF_NAME = "SharedPreference";
     private final Context context;
@@ -76,7 +78,7 @@ public class SharedPreferencesHelper {
      * @param defValue - Default value to be returned if shared preference isn't found.
      * @return value - String containing value of the shared preference if found.
      */
-    public @NonNull String getString(@NonNull String key, @NonNull String defValue) {
+    public @Nullable String getString(@NonNull String key, @Nullable String defValue) {
         SharedPreferences settings = context.getSharedPreferences(PREF_NAME, 0);
         return settings.getString(key, defValue);
     }

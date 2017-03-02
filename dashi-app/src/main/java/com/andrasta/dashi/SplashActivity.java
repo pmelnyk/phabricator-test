@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_ALPR_CONFIG_COPIED;
+import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_ALPR_CONFIG_DIR;
 import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_APP_INITIALIZED;
 
 public class SplashActivity extends Activity implements OnRequestPermissionsResultCallback {
@@ -54,7 +55,10 @@ public class SplashActivity extends Activity implements OnRequestPermissionsResu
 
         Log.d(TAG, "App isn't initialized. Start initialization.");
         LicensePlateMatcher.getInstance(prefs).initialize();
-        new AlprConfigCopierTask(this, getFilesDir(), prefs).execute();
+
+        File configDir = getFilesDir();
+        prefs.setString(KEY_ALPR_CONFIG_DIR, configDir.getAbsolutePath());
+        new AlprConfigCopierTask(this, configDir, prefs).execute();
     }
 
     private void startMainActivity() {

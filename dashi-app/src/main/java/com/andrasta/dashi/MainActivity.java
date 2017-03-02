@@ -63,6 +63,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_ALPR_CONFIG_DIR;
 import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_CAMERA_ROTATION;
 
 public class MainActivity extends AppCompatActivity implements CameraListener {
@@ -136,7 +137,8 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
 
         display = getWindowManager().getDefaultDisplay();
         licensePlateMatcher = LicensePlateMatcher.getInstance(prefs);
-        alprHandler = new AlprHandler(getFilesDir(), alprCallback, licensePlateMatcher, new Handler());
+        File configDir = new File(prefs.getString(KEY_ALPR_CONFIG_DIR, null));
+        alprHandler = new AlprHandler(configDir, alprCallback, licensePlateMatcher, new Handler());
         camera = new Camera(this, this);
         createCameraSizesAdapter();
         try {
