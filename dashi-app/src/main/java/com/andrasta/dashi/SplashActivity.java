@@ -36,16 +36,25 @@ public class SplashActivity extends Activity implements OnRequestPermissionsResu
         setContentView(R.layout.activity_splash);
 
         prefs = new SharedPreferencesHelper(getApplicationContext());
+        if (checkPermissions()) {
+            onAllPermissionsGranted();
+        } else {
+            Log.d(TAG, "Request permissions");
+        }
+    }
+
+    private void onAllPermissionsGranted() {
+        Log.d(TAG, "All permissions granted");
+
         if (prefs.getBoolean(KEY_APP_INITIALIZED, false)) {
             Log.d(TAG, "App initialized already");
             startMainActivity();
             return;
         }
 
-        Log.d(TAG, "App isn't initialized. Request permissions.");
-        if (checkPermissions()) {
-            onAllPermissionsGranted();
-        }
+        Log.d(TAG, "App isn't initialized. Start initialization.");
+        LicensePlateMatcher.getInstance(prefs).initialize();
+        new AlprConfigCopierTask(this, getFilesDir(), prefs).execute();
     }
 
     private void startMainActivity() {
@@ -90,12 +99,6 @@ public class SplashActivity extends Activity implements OnRequestPermissionsResu
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
-    }
-
-    private void onAllPermissionsGranted() {
-        Log.d(TAG, "All permissions granted");
-        LicensePlateMatcher.getInstance(prefs).initialize();
-        new AlprConfigCopierTask(this, getFilesDir(), prefs).execute();
     }
 
     private static final class AlprConfigCopierTask extends AsyncTask<Void, Void, Void> {
