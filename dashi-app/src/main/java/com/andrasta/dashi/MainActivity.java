@@ -20,16 +20,20 @@ import android.os.Environment;
 import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.support.v4.util.Pair;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.AppCompatActivity;
 import android.text.Html;
 import android.util.Log;
+import android.util.Pair;
+import android.util.Size;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -63,35 +67,35 @@ import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_CAMERA_ROTATI
 
 public class MainActivity extends AppCompatActivity implements CameraListener {
     private static final String TAG = "MainActivity";
-    private static final String CONFIG_ZIP_FILE_NAME = "alpr_config.zip";
     private static final int RECOGNITION_HISTORY_SIZE = 10;
 
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault());
     private final File imageDestination = new File(Environment.getExternalStorageDirectory(), "pic.jpg");
-    private CyclicBuffer<String> resultsBuffer = new CyclicBuffer<>(RECOGNITION_HISTORY_SIZE);
+    private final CyclicBuffer<String> printResultsBuffer = new CyclicBuffer<>(RECOGNITION_HISTORY_SIZE);
     private final AtomicBoolean saveImageOnDisk = new AtomicBoolean();
-    private LocationHelper locationHelper = new LocationHelper();
+    private final LocationHelper locationHelper = new LocationHelper();
     private LicensePlateMatcher licensePlateMatcher;
     private SharedPreferencesHelper prefs;
     private AlprHandler alprHandler;
 
-    private ImageSaver imageSaver = new ImageSaver();
+    private final ImageSaver imageSaver = new ImageSaver();
     private CameraConfig.Builder configBuilder;
+    private ImageReader imageReader;
+    private Size cameraRecSize;
     private Display display;
     private Camera camera;
 
     private AutoFitTextureView textureView;
     private TextView recognitionResult;
     private PolygonView polygonView;
-    private ImageReader imageReader;
+    private Spinner spinner;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         prefs = new SharedPreferencesHelper(this);
-        setupOrientation(prefs);
+        setupOrientation();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        display = getWindowManager().getDefaultDisplay();
 
         ((DrawerLayout) findViewById(R.id.drawer)).openDrawer(Gravity.LEFT);
         polygonView = (PolygonView) findViewById(R.id.plate_polygon);
@@ -99,7 +103,7 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
         recognitionResult.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                resultsBuffer.reset();
+                printResultsBuffer.reset();
                 recognitionResult.setText("");
             }
         });
@@ -111,12 +115,30 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
                 saveImageOnDisk.set(true);
             }
         });
+        spinner = (Spinner) findViewById(R.id.camera_resolutions);
+        spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                Size size = (Size) parent.getAdapter().getItem(position);
+                if (!cameraRecSize.equals(size)) {
+                    cameraRecSize = size;
+                    camera.close();
+                    alprHandler.stop();
+                    openCamera(textureView.getWidth(), textureView.getHeight());
+                    alprHandler.start();
+                }
+            }
 
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
+
+        display = getWindowManager().getDefaultDisplay();
         licensePlateMatcher = LicensePlateMatcher.getInstance(prefs);
-
         alprHandler = new AlprHandler(getFilesDir(), alprCallback, licensePlateMatcher, new Handler());
         camera = new Camera(this, this);
-
+        createCameraSizesAdapter();
         try {
             locationHelper.start(this);
         } catch (IOException ioe) {
@@ -124,7 +146,18 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
         }
     }
 
-    private void setupOrientation(@NonNull SharedPreferencesHelper prefs) {
+    private void createCameraSizesAdapter() {
+        Pair<String, List<Size>> pair = CameraUtils.getMainCameraImageSizes(this, ImageFormat.YUV_420_888);
+        if (pair == null) {
+            throw new RuntimeException("No camera sizes");
+        }
+        cameraRecSize = pair.second.get(0);
+        ArrayAdapter<Size> adapter = new ArrayAdapter<>(this, R.layout.simple_spinner_item, pair.second);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+    }
+
+    private void setupOrientation() {
         int orientation = this.prefs.getInt(KEY_CAMERA_ROTATION, 90);
         if (orientation == 270) {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE);
@@ -163,25 +196,32 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
             int orientation = this.getResources().getConfiguration().orientation;
             if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
                 textureView.setAspectRatio(cameraWidth, cameraHeight);
+                polygonView.setAspectRatio(cameraWidth, cameraHeight);
             } else {
                 textureView.setAspectRatio(cameraHeight, cameraWidth);
+                polygonView.setAspectRatio(cameraHeight, cameraWidth);
             }
             Matrix matrix = CameraUtils.configureTransform(display.getRotation(), width, height, cameraWidth, cameraHeight);
             textureView.setTransform(matrix);
             SurfaceTexture texture = textureView.getSurfaceTexture();
+            if (texture == null) {
+                Log.d(TAG, "No SurfaceTexture");
+                return;
+            }
             // We configure the size of default buffer to be the size of camera preview we want.
             texture.setDefaultBufferSize(cameraWidth, cameraHeight);
 
             CameraConfig.Request request = new CameraConfig.Request(CameraDevice.TEMPLATE_PREVIEW, new Surface(texture));
             request.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
             configBuilder.addRequest(request);
+            Log.d(TAG, "Display camera resolution " + cameraWidth + 'x' + cameraHeight);
 
-            imageReader = ImageReader.newInstance(cameraWidth, cameraHeight, ImageFormat.YUV_420_888, /*maxImages*/ 1);
+            imageReader = ImageReader.newInstance(cameraRecSize.getWidth(), cameraRecSize.getHeight(), ImageFormat.YUV_420_888, /*maxImages*/ 1);
             imageReader.setOnImageAvailableListener(this, null);
             request = new CameraConfig.Request(CameraDevice.TEMPLATE_PREVIEW, imageReader.getSurface());
             configBuilder.addRequest(request);
+            Log.d(TAG, "Recognition camera resolution " + cameraRecSize.getWidth() + 'x' + cameraRecSize.getHeight());
 
-            Log.d(TAG, "Resolution selected " + cameraWidth + 'x' + cameraHeight);
             camera.open(configBuilder.build());
             Log.d(TAG, "Camera opened: " + configBuilder.getCameraId());
         } catch (CameraAccessException e) {
@@ -192,7 +232,7 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
         }
     }
 
-    public void onCameraOrientationSet(int orientation) {
+    private void onCameraOrientationSet(int orientation) {
         if (prefs.getInt(KEY_CAMERA_ROTATION, 90) != orientation) {
             prefs.setInt(KEY_CAMERA_ROTATION, orientation);
             finish();
@@ -212,7 +252,7 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
         try {
             alprHandler.recognize(reader.acquireNextImage());
         } catch (IllegalStateException e) {
-            Log.w(TAG, e);
+            Log.w(TAG, "Error on acquireNextImage");
         }
     }
 
@@ -265,17 +305,15 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
         private void showResult(final int sourceWidth, final int sourceHeight, final PlateResult plate) {
             if (plate != null) {
                 Log.d(TAG, "Best result: " + plate.getBestPlate().getPlate());
-                resultsBuffer.add(getResultLine(plate.getBestPlate()));
-                polygonView.setAspectRatio(sourceWidth, sourceHeight);
+                printResultsBuffer.add(getResultLine(plate.getBestPlate()));
                 polygonView.setPolygon(sourceWidth, sourceHeight, plate.getPlateCoordinates());
             } else {
-                resultsBuffer.add("");
-                polygonView.setAspectRatio(sourceWidth, sourceHeight);
+                printResultsBuffer.add("");
                 polygonView.clear();
             }
 
             final StringBuilder sb = new StringBuilder();
-            for (String pl : resultsBuffer.asList()) {
+            for (String pl : printResultsBuffer.asList()) {
                 if (pl != null) {
                     sb.append(pl).append("<br>");
                 }

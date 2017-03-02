@@ -2,8 +2,8 @@ package com.andrasta.dashi.service;
 
 import android.location.Location;
 import android.support.annotation.NonNull;
-import android.support.v4.util.Pair;
 import android.util.Log;
+import android.util.Pair;
 
 import com.andrasta.dashi.openalpr.AlprResult;
 import com.andrasta.dashi.openalpr.Plate;

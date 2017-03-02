@@ -10,18 +10,24 @@ import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.util.Log;
+import android.util.Pair;
 import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.Display;
 import android.view.Surface;
 
+import com.andrasta.dashi.utils.Preconditions;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class CameraUtils {
     private static final String TAG = "CameraUtils";
@@ -45,6 +51,14 @@ public class CameraUtils {
         ORIENTATIONS.append(Surface.ROTATION_90, 0);
         ORIENTATIONS.append(Surface.ROTATION_180, 270);
         ORIENTATIONS.append(Surface.ROTATION_270, 180);
+    }
+
+    private static final Set<Size> BROKEN_RESOLUTIONS = new HashSet<>();
+
+    static {
+        BROKEN_RESOLUTIONS.add(new Size(1440, 1080));
+        BROKEN_RESOLUTIONS.add(new Size(4048, 3036));
+        BROKEN_RESOLUTIONS.add(new Size(4000, 3000));
     }
 
     /**
@@ -114,12 +128,11 @@ public class CameraUtils {
     }
 
     // Workaround for Google Nexus 5x and Pixel devices
-    // When format is YUV_420_888 and image resolution is 1440x1080
-    // camera responds with trash instead of real image
-    private static boolean skipThisChoice(Size option) {
-        return (option.getWidth() == 1440 && option.getHeight() == 1080)
-                || (option.getWidth() == 4048 && option.getHeight() == 3036)
-                || (option.getWidth() == 4000 && option.getHeight() == 3000);
+    // When format is YUV_420_888 and image resolution is inside brokenResolutions
+    // array camera responds with trash instead of real image
+    // TODO: Check if those size works in other Android OS versions
+    private static boolean skipThisChoice(Size size) {
+        return BROKEN_RESOLUTIONS.contains(size);
     }
 
     private static boolean isSwappedDimensions(int rotation, int orientation) {
@@ -172,7 +185,9 @@ public class CameraUtils {
 
     @Nullable
     @SuppressWarnings("SuspiciousNameCombination")
-    public static CameraConfig.Builder initCameraConfig(Context context, Display display, int width, int height) throws CameraAccessException {
+    public static CameraConfig.Builder initCameraConfig(@NonNull Context context, @NonNull Display display, int width, int height) throws CameraAccessException {
+        Preconditions.assertParameterNotNull(context, "context");
+        Preconditions.assertParameterNotNull(display, "display");
         CameraManager manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
         for (String cameraId : manager.getCameraIdList()) {
             CameraCharacteristics cc = manager.getCameraCharacteristics(cameraId);
@@ -246,4 +261,38 @@ public class CameraUtils {
                     (long) rhs.getWidth() * rhs.getHeight());
         }
     };
+
+    @Nullable
+    public static Pair<String, List<Size>> getMainCameraImageSizes(@NonNull Context context, int format) {
+        Preconditions.assertParameterNotNull(context, "context");
+        CameraManager manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+        try {
+            for (String cameraId : manager.getCameraIdList()) {
+                CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+
+                // Skip front facing camera
+                Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
+                if (facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT) {
+                    continue;
+                }
+
+                StreamConfigurationMap map = characteristics.get(
+                        CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                if (map == null) {
+                    continue;
+                }
+
+                Size[] options = map.getOutputSizes(format);
+                List<Size> sizes = new ArrayList<>(options.length);
+                Collections.addAll(sizes, options);
+                sizes.removeAll(BROKEN_RESOLUTIONS);
+
+                // For still image captures, we use the largest available size.
+                return new Pair<>(cameraId, sizes);
+            }
+        } catch (CameraAccessException e) {
+            throw new RuntimeException(e);
+        }
+        return null;
+    }
 }

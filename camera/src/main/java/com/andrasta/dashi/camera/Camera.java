@@ -167,7 +167,6 @@ public class Camera {
                 } else {
                     captureSession.setRepeatingBurst(requests, captureCallback, handler);
                 }
-
             } catch (CameraAccessException e) {
                 cameraListener.onError(false, e);
             }

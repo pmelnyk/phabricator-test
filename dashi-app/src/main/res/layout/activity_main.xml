@@ -12,8 +12,7 @@
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/main_background"
-        >
+        android:background="@color/main_background">
 
         <com.andrasta.dashi.view.AutoFitTextureView
             android:id="@+id/texture"
@@ -34,13 +33,29 @@
         android:layout_height="match_parent"
         android:layout_gravity="start"
         android:background="#55000000"
-        android:fitsSystemWindows="true">
+        android:fitsSystemWindows="false">
 
-        <TextView
-            android:id="@+id/recognition_result"
+        <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:padding="5dp"/>
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="10dp">
+
+            <Spinner
+                android:id="@+id/camera_resolutions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="15dp"
+                android:spinnerMode="dialog"/>
+
+            <TextView
+                android:id="@+id/recognition_result"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="15dp"/>
+
+        </LinearLayout>
+
     </android.support.design.widget.NavigationView>
 
 </android.support.v4.widget.DrawerLayout>
