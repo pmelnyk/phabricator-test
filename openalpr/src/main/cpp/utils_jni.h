@@ -10,7 +10,7 @@
 
 #define JEXCEPTION_CHECK(E) \
 if (env->ExceptionCheck()) { \
-    return 0;\m
+    return 0;\
 }
 
 #define JEXCEPTION_CHECKR(E, R) \
