@@ -43,7 +43,9 @@ public class SplashActivity extends Activity implements OnRequestPermissionsResu
         }
 
         Log.d(TAG, "App isn't initialized. Request permissions.");
-        askForPermissions();
+        if (checkPermissions()) {
+            onAllPermissionsGranted();
+        }
     }
 
     private void startMainActivity() {
@@ -53,7 +55,7 @@ public class SplashActivity extends Activity implements OnRequestPermissionsResu
         finish();
     }
 
-    private boolean askForPermissions() {
+    private boolean checkPermissions() {
         if (!PermissionsHelper.hasPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)) {
             requestId = PermissionsHelper.requestPermission(this, Manifest.permission.ACCESS_FINE_LOCATION, R.string.location_permission_rationale);
             return false;
@@ -76,20 +78,24 @@ public class SplashActivity extends Activity implements OnRequestPermissionsResu
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         if (requestCode == requestId) {
-            if (!askForPermissions()) {
+            if (!checkPermissions()) {
                 return;
             }
 
             if (grantResults.length != 1 || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
                 MainActivity.ExitDialog.newInstance(getString(R.string.permission_discard)).show(getFragmentManager(), "Dialog");
             } else {
-                Log.d(TAG, "All permissions granted");
-                LicensePlateMatcher.getInstance(prefs).initialize();
-                new AlprConfigCopierTask(this, getFilesDir(), prefs).execute();
+                onAllPermissionsGranted();
             }
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
+    }
+
+    private void onAllPermissionsGranted() {
+        Log.d(TAG, "All permissions granted");
+        LicensePlateMatcher.getInstance(prefs).initialize();
+        new AlprConfigCopierTask(this, getFilesDir(), prefs).execute();
     }
 
     private static final class AlprConfigCopierTask extends AsyncTask<Void, Void, Void> {
