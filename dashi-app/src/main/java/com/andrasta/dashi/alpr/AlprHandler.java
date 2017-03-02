@@ -15,6 +15,7 @@ import com.andrasta.dashi.utils.Preconditions;
 
 import java.io.File;
 import java.nio.ByteBuffer;
+import java.text.DecimalFormat;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -24,6 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class AlprHandler {
     private static final String TAG = "AlprHandler";
 
+    private static final DecimalFormat decimalFormat = new DecimalFormat("0.##");
     private static final String CONFIG_FILE_NAME = "openalpr.conf";
     private static final String RUNTIME_DIR = "runtime_data";
     private static final int IMAGE_WAIT_TIMEOUT = 100;
@@ -36,6 +38,11 @@ public class AlprHandler {
     private volatile ImageHandler imageHandler;
     private final Handler callbackHandler;
     private final Alpr alpr;
+    private long handledImageCounter;
+    private long handlingStartTime;
+    private float bestPace = Float.MIN_VALUE;
+    private float worstPace = Float.MAX_VALUE;
+    private float avgPace;
 
     @UiThread
     public AlprHandler(@NonNull File configDir, @NonNull AlprCallback callback, @NonNull LicensePlateMatcher licensePlateMatcher) {
@@ -79,6 +86,8 @@ public class AlprHandler {
     public void start() {
         if (imageHandler == null) {
             Log.d(TAG, "Handler started.");
+            handledImageCounter = 0;
+            handlingStartTime = 0;
             imageHandler = new ImageHandler();
             executor.execute(imageHandler);
         }
@@ -120,11 +129,10 @@ public class AlprHandler {
                     ByteBuffer yBuffer = image.getPlanes()[0].getBuffer(); // Y channel
                     long timestamp = System.currentTimeMillis();
                     final AlprResult result = alpr.recognizeFromByteBuffer(yBuffer, 1, image.getWidth(), image.getHeight());
-                    long delta = System.currentTimeMillis() - timestamp;
-                    Log.w(TAG, "Alpr recognition time: " + delta);
+                    logStats(System.currentTimeMillis() - timestamp);
 
                     byte[] bytes = null;
-                    if(!licensePlateMatcher.findMatches(result).isEmpty()) {
+                    if (!licensePlateMatcher.findMatches(result).isEmpty()) {
                         bytes = ImageUtil.imageToJpeg(image);
                     }
 
@@ -157,9 +165,40 @@ public class AlprHandler {
             Log.d(TAG, "ImageHandler terminated.");
         }
 
+        private void logStats(long imgHandlingTime) {
+            Log.d(TAG, "Alpr recognition time: " + imgHandlingTime);
+
+            if (handlingStartTime == 0) {
+                handlingStartTime = System.currentTimeMillis();
+            } else {
+                handledImageCounter++;
+                float pace = handledImageCounter / ((System.currentTimeMillis() - handlingStartTime) / 1000f);
+                Log.d(TAG, "Image handling pace (img/sec): " + decimalFormat.format(pace));
+
+                if (pace > bestPace) {
+                    bestPace = pace;
+                }
+                if (pace < worstPace) {
+                    worstPace = pace;
+                }
+
+                if (handledImageCounter > 3) { // Skip first 3 frames, cos first frames have large deviation
+                    avgPace = movingAvg(pace, avgPace, handledImageCounter - 3);
+                }
+
+                String statMsg = String.format("Best\\Worst\\Avg pace: %s\\%s\\%s", decimalFormat.format(bestPace), decimalFormat.format(worstPace), decimalFormat.format(avgPace));
+                Log.d(TAG, statMsg);
+
+            }
+        }
+
         void stop() {
             this.stop.set(true);
         }
+    }
+
+    private static float movingAvg(float value, float avg, long counter) {
+        return (Math.abs(value) + ((counter - 1) * avg)) / counter;
     }
 
     public static interface AlprCallback {
