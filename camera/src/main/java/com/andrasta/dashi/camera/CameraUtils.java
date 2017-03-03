@@ -1,17 +1,39 @@
 package com.andrasta.dashi.camera;
 
+import android.content.Context;
+import android.graphics.ImageFormat;
+import android.graphics.Matrix;
+import android.graphics.Point;
+import android.graphics.RectF;
+import android.graphics.SurfaceTexture;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.params.StreamConfigurationMap;
+import android.support.annotation.Nullable;
 import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
+import android.view.Display;
 import android.view.Surface;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-class CameraUtils {
+public class CameraUtils {
     private static final String TAG = "CameraUtils";
+
+    /**
+     * Max preview width that is guaranteed by Camera API
+     */
+    private static final int MAX_PREVIEW_WIDTH = 1920;
+    /**
+     * Max preview height that is guaranteed by Camera API
+     */
+    private static final int MAX_PREVIEW_HEIGHT = 1080;
 
     /**
      * Conversion from screen rotation to JPEG orientation.
@@ -55,8 +77,8 @@ class CameraUtils {
      * @param aspectRatio       The aspect ratio
      * @return The optimal {@code Size}, or an arbitrary one if none were big enough
      */
-    static Size chooseOptimalSize(Size[] choices, int textureViewWidth,
-                                  int textureViewHeight, int maxWidth, int maxHeight, Size aspectRatio) {
+    private static Size chooseOptimalSize(Size[] choices, int textureViewWidth,
+                                          int textureViewHeight, int maxWidth, int maxHeight, Size aspectRatio) {
 
         // Collect the supported resolutions that are at least as big as the preview Surface
         List<Size> bigEnough = new ArrayList<>();
@@ -65,7 +87,7 @@ class CameraUtils {
         int w = aspectRatio.getWidth();
         int h = aspectRatio.getHeight();
         for (Size option : choices) {
-            if(skipThisChoice(option)) {
+            if (skipThisChoice(option)) {
                 continue;
             }
             if (option.getWidth() <= maxWidth && option.getHeight() <= maxHeight &&
@@ -100,7 +122,7 @@ class CameraUtils {
                 || (option.getWidth() == 4000 && option.getHeight() == 3000);
     }
 
-    static boolean isSwappedDimensions(int rotation, int orientation) {
+    private static boolean isSwappedDimensions(int rotation, int orientation) {
         switch (rotation) {
             case Surface.ROTATION_0:
             case Surface.ROTATION_180:
@@ -121,9 +143,102 @@ class CameraUtils {
     }
 
     /**
+     * Configures the necessary {@link Matrix} transformation to `textureView`.
+     * This method should be called after the camera preview size is determined in
+     * setUpCameraOutputs and also the size of `textureView` is fixed.
+     *
+     * @param viewWidth  The width of `textureView`
+     * @param viewHeight The height of `textureView`
+     */
+    public static Matrix configureTransform(int rotation, int viewWidth, int viewHeight, int cameraWidth, int cameraHeight) {
+        Matrix matrix = new Matrix();
+        RectF viewRect = new RectF(0, 0, viewWidth, viewHeight);
+        RectF bufferRect = new RectF(0, 0, cameraHeight, cameraWidth);
+        float centerX = viewRect.centerX();
+        float centerY = viewRect.centerY();
+        if (Surface.ROTATION_90 == rotation || Surface.ROTATION_270 == rotation) {
+            bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
+            matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
+            float scale = Math.max(
+                    (float) viewHeight / cameraHeight,
+                    (float) viewWidth / cameraWidth);
+            matrix.postScale(scale, scale, centerX, centerY);
+            matrix.postRotate(90 * (rotation - 2), centerX, centerY);
+        } else if (Surface.ROTATION_180 == rotation) {
+            matrix.postRotate(180, centerX, centerY);
+        }
+        return matrix;
+    }
+
+    @Nullable
+    @SuppressWarnings("SuspiciousNameCombination")
+    public static CameraConfig.Builder initCameraConfig(Context context, Display display, int width, int height) throws CameraAccessException {
+        CameraManager manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
+        for (String cameraId : manager.getCameraIdList()) {
+            CameraCharacteristics cc = manager.getCameraCharacteristics(cameraId);
+
+            // Skip front facing camera
+            Integer facing = cc.get(CameraCharacteristics.LENS_FACING);
+            if (facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT) {
+                continue;
+            }
+
+            StreamConfigurationMap map = cc.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            if (map == null) {
+                continue;
+            }
+
+            // For still image captures, we use the largest available size.
+            Size largest = Collections.max(Arrays.asList(map.getOutputSizes(ImageFormat.YUV_420_888)),
+                    CameraUtils.SIZE_COMPARATOR);
+
+            // Find out if we need to swap dimension to get the preview size relative to sensor
+            // coordinate.
+            int displayRotation = display.getRotation();
+            //noinspection ConstantConditions
+            int cameraOrientation = cc.get(CameraCharacteristics.SENSOR_ORIENTATION);
+            boolean swappedDimensions = CameraUtils.isSwappedDimensions(displayRotation, cameraOrientation);
+
+            Point displaySize = new Point();
+            display.getSize(displaySize);
+            int rotatedPreviewWidth = width;
+            int rotatedPreviewHeight = height;
+            int maxPreviewWidth = displaySize.x;
+            int maxPreviewHeight = displaySize.y;
+
+            if (swappedDimensions) {
+                rotatedPreviewWidth = height;
+                rotatedPreviewHeight = width;
+                maxPreviewWidth = displaySize.y;
+                maxPreviewHeight = displaySize.x;
+            }
+
+            if (maxPreviewWidth > MAX_PREVIEW_WIDTH) {
+                maxPreviewWidth = MAX_PREVIEW_WIDTH;
+            }
+
+            if (maxPreviewHeight > MAX_PREVIEW_HEIGHT) {
+                maxPreviewHeight = MAX_PREVIEW_HEIGHT;
+            }
+
+            // Danger, W.R.! Attempting to use too large a preview size could  exceed the camera
+            // bus' bandwidth limitation, resulting in gorgeous previews but the storage of
+            // garbage capture data.
+            Size size = CameraUtils.chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class), rotatedPreviewWidth, rotatedPreviewHeight, maxPreviewWidth, maxPreviewHeight, largest);
+            if (size != null) {
+                CameraConfig.Builder builder = new CameraConfig.Builder(cameraId);
+                builder.setCameraOrientation(cameraOrientation);
+                builder.setSize(size);
+                return builder;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Compares two {@link Size} objects based on their areas.
      */
-    static Comparator<Size> SIZE_COMPARATOR = new Comparator<Size>() {
+    private static Comparator<Size> SIZE_COMPARATOR = new Comparator<Size>() {
         @Override
         public int compare(Size lhs, Size rhs) {
             // We cast here to ensure the multiplications won't overflow

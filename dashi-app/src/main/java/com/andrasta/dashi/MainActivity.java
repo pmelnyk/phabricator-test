@@ -6,6 +6,13 @@ import android.app.Dialog;
 import android.app.DialogFragment;
 import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
+import android.graphics.ImageFormat;
+import android.graphics.Matrix;
+import android.graphics.SurfaceTexture;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraDevice;
+import android.hardware.camera2.CaptureRequest;
 import android.location.Location;
 import android.media.ImageReader;
 import android.os.Bundle;
@@ -18,7 +25,10 @@ import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.AppCompatActivity;
 import android.text.Html;
 import android.util.Log;
+import android.view.Display;
 import android.view.Gravity;
+import android.view.Surface;
+import android.view.TextureView;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -26,6 +36,8 @@ import android.widget.Toast;
 import com.andrasta.dashi.alpr.AlprHandler;
 import com.andrasta.dashi.camera.Camera;
 import com.andrasta.dashi.camera.Camera.CameraListener;
+import com.andrasta.dashi.camera.CameraConfig;
+import com.andrasta.dashi.camera.CameraUtils;
 import com.andrasta.dashi.camera.ImageSaver;
 import com.andrasta.dashi.location.LocationHelper;
 import com.andrasta.dashi.openalpr.AlprResult;
@@ -38,9 +50,6 @@ import com.andrasta.dashi.utils.SharedPreferencesHelper;
 import com.andrasta.dashi.view.AutoFitTextureView;
 import com.andrasta.dashi.view.PolygonView;
 import com.andrasta.dashiclient.LicensePlate;
-
-import org.tensorflow.TensorFlowException;
-import org.tensorflow.contrib.android.TensorFlowInferenceInterface;
 
 import java.io.File;
 import java.io.IOException;
@@ -59,28 +68,30 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
 
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault());
     private final File imageDestination = new File(Environment.getExternalStorageDirectory(), "pic.jpg");
-    private final AtomicBoolean requestImage = new AtomicBoolean();
-    private File configDir;
-    private LocationHelper locationHelper = new LocationHelper();
     private CyclicBuffer<String> resultsBuffer = new CyclicBuffer<>(RECOGNITION_HISTORY_SIZE);
-    private ImageSaver imageSaver = new ImageSaver();
+    private final AtomicBoolean saveImageOnDisk = new AtomicBoolean();
+    private LocationHelper locationHelper = new LocationHelper();
+    private LicensePlateMatcher licensePlateMatcher;
     private SharedPreferencesHelper prefs;
+    private AlprHandler alprHandler;
+
+    private ImageSaver imageSaver = new ImageSaver();
+    private CameraConfig.Builder configBuilder;
+    private Display display;
+    private Camera camera;
+
     private AutoFitTextureView textureView;
     private TextView recognitionResult;
     private PolygonView polygonView;
-    private AlprHandler alprHandler;
-    private Camera camera;
-    private int requestId;
-    private LicensePlateMatcher licensePlateMatcher;
+    private ImageReader imageReader;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
         prefs = new SharedPreferencesHelper(this);
         setupOrientation(prefs);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        configDir = getFilesDir();
+        display = getWindowManager().getDefaultDisplay();
 
         ((DrawerLayout) findViewById(R.id.drawer)).openDrawer(Gravity.LEFT);
         polygonView = (PolygonView) findViewById(R.id.plate_polygon);
@@ -93,17 +104,19 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
             }
         });
         textureView = (AutoFitTextureView) findViewById(R.id.texture);
+        textureView.setSurfaceTextureListener(textureListener);
         textureView.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                requestImage.set(true);
+                saveImageOnDisk.set(true);
             }
         });
 
         licensePlateMatcher = LicensePlateMatcher.getInstance(prefs);
 
-        alprHandler = new AlprHandler(configDir, alprCallback, licensePlateMatcher, new Handler());
-        camera = new Camera(textureView, this);
+        alprHandler = new AlprHandler(getFilesDir(), alprCallback, licensePlateMatcher, new Handler());
+        camera = new Camera(this, this);
+
         try {
             locationHelper.start(this);
         } catch (IOException ioe) {
@@ -123,27 +136,74 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
     }
 
     @Override
-    public void onResume() {
-        super.onResume();
+    public void onStart() {
+        super.onStart();
         alprHandler.start();
-        if (camera != null) {
-            camera.open();
+        if (textureView.isAvailable()) {
+            openCamera(textureView.getWidth(), textureView.getHeight());
         }
     }
 
     @Override
-    public void onPause() {
+    public void onStop() {
         alprHandler.stop();
-        if (camera != null) {
-            camera.close();
+        super.onStop();
+    }
+
+    @SuppressWarnings("MissingPermission")
+    private void openCamera(int width, int height) {
+        try {
+            configBuilder = CameraUtils.initCameraConfig(this, display, width, height);
+            onCameraOrientationSet(configBuilder.getCameraOrientation());
+
+            int cameraWidth = configBuilder.getSize().getWidth();
+            int cameraHeight = configBuilder.getSize().getHeight();
+
+            // We fit the aspect ratio of TextureView to the size of preview we picked.
+            int orientation = this.getResources().getConfiguration().orientation;
+            if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                textureView.setAspectRatio(cameraWidth, cameraHeight);
+            } else {
+                textureView.setAspectRatio(cameraHeight, cameraWidth);
+            }
+            Matrix matrix = CameraUtils.configureTransform(display.getRotation(), width, height, cameraWidth, cameraHeight);
+            textureView.setTransform(matrix);
+            SurfaceTexture texture = textureView.getSurfaceTexture();
+            // We configure the size of default buffer to be the size of camera preview we want.
+            texture.setDefaultBufferSize(cameraWidth, cameraHeight);
+
+            CameraConfig.Request request = new CameraConfig.Request(CameraDevice.TEMPLATE_PREVIEW, new Surface(texture));
+            request.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+            configBuilder.addRequest(request);
+
+            imageReader = ImageReader.newInstance(cameraWidth, cameraHeight, ImageFormat.YUV_420_888, /*maxImages*/ 1);
+            imageReader.setOnImageAvailableListener(this, null);
+            request = new CameraConfig.Request(CameraDevice.TEMPLATE_PREVIEW, imageReader.getSurface());
+            configBuilder.addRequest(request);
+
+            Log.d(TAG, "Resolution selected " + cameraWidth + 'x' + cameraHeight);
+            camera.open(configBuilder.build());
+            Log.d(TAG, "Camera opened: " + configBuilder.getCameraId());
+        } catch (CameraAccessException e) {
+            onError(false, e);
+        } catch (NullPointerException e) {
+            // Currently an NPE is thrown when the Camera2API is used but not supported on the device
+            onError(true, e);
         }
-        super.onPause();
+    }
+
+    public void onCameraOrientationSet(int orientation) {
+        if (prefs.getInt(KEY_CAMERA_ROTATION, 90) != orientation) {
+            prefs.setInt(KEY_CAMERA_ROTATION, orientation);
+            finish();
+            startActivity(getIntent());
+        }
     }
 
     @Override
     public void onImageAvailable(@NonNull ImageReader reader) {
         Preconditions.assertParameterNotNull(reader, "reader");
-        if (requestImage.getAndSet(false)) {
+        if (saveImageOnDisk.getAndSet(false)) {
             imageSaver.saveToFile(reader.acquireNextImage(), imageDestination);
             Toast.makeText(this, "Image saved to " + imageDestination.getAbsolutePath(), Toast.LENGTH_SHORT).show();
             return;
@@ -152,16 +212,7 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
         try {
             alprHandler.recognize(reader.acquireNextImage());
         } catch (IllegalStateException e) {
-            //expected
-        }
-    }
-
-    @Override
-    public void onCameraOrientationSet(int orientation) {
-        if (prefs.getInt(KEY_CAMERA_ROTATION, 90) != orientation) {
-            prefs.setInt(KEY_CAMERA_ROTATION, orientation);
-            finish();
-            startActivity(getIntent());
+            Log.w(TAG, e);
         }
     }
 
@@ -269,4 +320,32 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
                     .create();
         }
     }
+
+    @SuppressWarnings("FieldCanBeLocal")
+    private final TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
+        @Override
+        public void onSurfaceTextureAvailable(SurfaceTexture texture, int width, int height) {
+            openCamera(textureView.getWidth(), textureView.getHeight());
+        }
+
+        @Override
+        public void onSurfaceTextureSizeChanged(SurfaceTexture texture, int width, int height) {
+            Matrix matrix = CameraUtils.configureTransform(display.getRotation(), width, height,
+                    configBuilder.getSize().getWidth(), configBuilder.getSize().getHeight());
+            textureView.setTransform(matrix);
+        }
+
+        @Override
+        public boolean onSurfaceTextureDestroyed(SurfaceTexture texture) {
+            Log.d(TAG, "SurfaceTexture Destroyed. Stop camera.");
+            texture.release();
+            imageReader.close();
+            camera.close();
+            return true;
+        }
+
+        @Override
+        public void onSurfaceTextureUpdated(SurfaceTexture texture) {
+        }
+    };
 }
