@@ -218,7 +218,7 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
             configBuilder.addRequest(request);
             Log.d(TAG, "Display camera resolution " + cameraWidth + 'x' + cameraHeight);
 
-            imageReader = ImageReader.newInstance(cameraRecSize.getWidth(), cameraRecSize.getHeight(), ImageFormat.YUV_420_888, /*maxImages*/ 1);
+            imageReader = ImageReader.newInstance(cameraRecSize.getWidth(), cameraRecSize.getHeight(), ImageFormat.YUV_420_888, alprHandler.getThreadsNum());
             imageReader.setOnImageAvailableListener(this, null);
             request = new CameraConfig.Request(CameraDevice.TEMPLATE_PREVIEW, imageReader.getSurface());
             configBuilder.addRequest(request);
