@@ -4,6 +4,7 @@
 #include "alpr.h"
 #include "utils_jni.h"
 #include "opencv/cv.h"
+#include "jobject_helper.h"
 
 using namespace alpr;
 using namespace std;
@@ -63,18 +64,6 @@ Java_com_andrasta_dashi_openalpr_Alpr_nGetVersion(JNIEnv *env, jclass type, jlon
     });
 }
 
-
-
-static const char* POINT_CLASS_NAME = "android/graphics/Point";
-static const char* POINT_CONSTRUCTOR_SIG = "(II)V";
-static JConstructor pointConstructor = JConstructor(POINT_CLASS_NAME, POINT_CONSTRUCTOR_SIG);
-
-static jobject createJPoint(JNIEnv *env, int x, int y) {
-    return pointConstructor.newObject(env, (jint)x, (jint)y);
-}
-
-
-
 static const char* PLATE_CLASS_NAME = "com/andrasta/dashi/openalpr/Plate";
 static const char* PLATE_CONSTRUCTOR_SIG = "(Ljava/lang/String;F)V";
 static JConstructor plateConstructor = JConstructor(PLATE_CLASS_NAME, PLATE_CONSTRUCTOR_SIG);
@@ -108,14 +97,11 @@ static jobject createJPlateResult(JNIEnv *env, const AlprPlateResult& alprPlateR
         env->DeleteLocalRef(jplate);
     }
 
-    auto pointClass = pointConstructor.getClass(env);
-    JEXCEPTION_CHECK(env);
+    auto jCoordinates = JObjectHelper::createJPointArray(env, 4);
 
-    auto jCoordinates = env->NewObjectArray(4, pointClass, NULL);
-    JEXCEPTION_CHECK(env);
     for (int i=0; i < 4; i++) {
         auto coordinate = alprPlateResults.plate_points[i];
-        auto jpoint = createJPoint(env, coordinate.x, coordinate.y);
+        auto jpoint = JObjectHelper::createJPoint(env, coordinate.x, coordinate.y);
         JEXCEPTION_CHECK(env);
         env->SetObjectArrayElement(jCoordinates, i, jpoint);
         JEXCEPTION_CHECK(env);

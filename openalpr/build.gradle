@@ -18,7 +18,7 @@ android {
                 arguments = [
                         '-DCMAKE_VERBOSE_MAKEFILE:BOOL=ON'
                         ]
-                cppFlags "-std=c++14"
+                cppFlags = ["-std=c++14", "-frtti", "-fexceptions"]
             }
         }
 

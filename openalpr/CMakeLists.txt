@@ -34,7 +34,10 @@ add_library( # Sets the name of the library.
              # Associated headers in the same location as their source
              # file are automatically included.
              ${src}/utils_jni.cpp
-             ${src}/openalpr_jni.cpp )
+             ${src}/openalpr_jni.cpp
+             ${src}/lanedetector_jni.cpp
+             ${src}/lanedetector.cpp
+             ${src}/jobject_helper.cpp)
 
 
 # Specifies libraries CMake should link to your target library. You
