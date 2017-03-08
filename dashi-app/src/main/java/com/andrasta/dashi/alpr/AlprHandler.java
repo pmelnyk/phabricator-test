@@ -18,6 +18,7 @@ import java.text.DecimalFormat;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -33,6 +34,7 @@ public class AlprHandler {
 
     private static final DecimalFormat decimalFormat = new DecimalFormat("0.##");
     private static final int THREADS = Runtime.getRuntime().availableProcessors();
+    private static final long DEFAULT_IMAGE_QUEUE_TIMEOUT = 1000;
     private static final String CONFIG_FILE_NAME = "openalpr.conf";
     private static final String RUNTIME_DIR = "runtime_data";
     private static final int IMAGE_WAIT_TIMEOUT = 100;
@@ -40,6 +42,7 @@ public class AlprHandler {
     private final ArrayBlockingQueue<Image> imageQueue = new ArrayBlockingQueue<Image>(THREADS * 2);
     private final ExecutorService executor = Executors.newFixedThreadPool(THREADS);
     private final ImageHandler[] imageHandlers = new ImageHandler[THREADS];
+    private final Semaphore recognitionSemaphore = new Semaphore(THREADS);
     private final AlprCallback callback;
     @NonNull
     private final LicensePlateMatcher licensePlateMatcher;
@@ -47,10 +50,12 @@ public class AlprHandler {
     private final File configFile;
     private final File runtimeDir;
 
+    private long imageQueueTimeout;
+    private long lastImageQueueTime;
     private long handledImageCounter;
-    private long handlingStartTime;
-    private float bestPace = Float.MIN_VALUE;
-    private float worstPace = Float.MAX_VALUE;
+    private long handlingTime;
+    private float worstPace;
+    private float bestPace;
     private float avgPace;
 
     public AlprHandler(@NonNull File configDir, @NonNull AlprCallback callback, @NonNull LicensePlateMatcher licensePlateMatcher) {
@@ -92,12 +97,19 @@ public class AlprHandler {
             }
         }
 
-        if (imageQueue.size() >= THREADS) {
-            Log.d(TAG, "Skip image; Queue size " + imageQueue.size());
+        if (recognitionSemaphore.availablePermits() == 0) {
+            Log.e(TAG, "No threads available. Skip image.");
             image.close();
             return;
         }
 
+        if (System.currentTimeMillis() - lastImageQueueTime < imageQueueTimeout) {
+            Log.e(TAG, "Processing timeout not passed. Skip image.");
+            image.close();
+            return;
+        }
+
+        lastImageQueueTime = System.currentTimeMillis();
         if (!imageQueue.offer(image)) {
             image.close();
         }
@@ -107,13 +119,22 @@ public class AlprHandler {
     public synchronized void start() {
         if (imageHandlers[0] == null) {
             Log.d(TAG, "Handler started. Threads num:" + THREADS);
-            handledImageCounter = 0;
-            handlingStartTime = 0;
+            resetTimeoutsAndStatistics();
             for (int i = 0; i < THREADS; i++) {
                 imageHandlers[i] = new ImageHandler();
                 executor.execute(imageHandlers[i]);
             }
         }
+    }
+
+    private void resetTimeoutsAndStatistics() {
+        handledImageCounter = 0;
+        handlingTime = 0;
+        imageQueueTimeout = DEFAULT_IMAGE_QUEUE_TIMEOUT;
+        lastImageQueueTime = 0;
+        bestPace = Float.MIN_VALUE;
+        worstPace = Float.MAX_VALUE;
+        avgPace = 0;
     }
 
     public synchronized void stop() {
@@ -137,10 +158,12 @@ public class AlprHandler {
     @SuppressWarnings("FieldCanBeLocal")
     private final class ImageHandler implements Runnable {
         private final AtomicBoolean stop = new AtomicBoolean(false);
+        private String logTag;
 
         @Override
         @SuppressWarnings("InfiniteLoopStatement")
         public void run() {
+            logTag = TAG + "#" + Thread.currentThread().getId();
             Alpr alpr = new Alpr(null, configFile.getAbsolutePath(), runtimeDir.getAbsolutePath());
             Image image = null;
             try {
@@ -152,35 +175,13 @@ public class AlprHandler {
                         continue;
                     }
 
-                    ByteBuffer yBuffer = image.getPlanes()[0].getBuffer(); // Y channel
-                    long timestamp = System.currentTimeMillis();
-                    final AlprResult result = alpr.recognizeFromByteBuffer(yBuffer, 1, image.getWidth(), image.getHeight());
-                    logStats(System.currentTimeMillis() - timestamp);
-
-                    byte[] bytes = null;
-                    if (!licensePlateMatcher.findMatches(result).isEmpty()) {
-                        bytes = ImageUtil.imageToJpeg(image);
-                    }
-
-                    final byte[] jpeg = bytes;
-                    image.close();
-                    if (callbackHandler == null) {
-                        callback.onComplete(jpeg, result);
-                    } else {
-                        callbackHandler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                callback.onComplete(jpeg, result);
-                            }
-                        });
-                    }
-
+                    recognize(alpr, image);
                     if (stop.get()) {
                         break;
                     }
                 }
             } catch (InterruptedException e) {
-                Log.e(TAG, "Interrupted", e);
+                Log.e(logTag, "Interrupted", e);
             } catch (Exception e) {
                 callback.onFailure(e);
             } finally {
@@ -188,33 +189,61 @@ public class AlprHandler {
                     image.close();
                 }
             }
-            Log.d(TAG, "ImageHandler terminated.");
+            Log.d(logTag, "ImageHandler terminated.");
+        }
+
+        private void recognize(Alpr alpr, Image image) throws InterruptedException {
+            try {
+                recognitionSemaphore.acquire();
+                ByteBuffer yBuffer = image.getPlanes()[0].getBuffer(); // Y channel
+                final AlprResult result = alpr.recognizeFromByteBuffer(yBuffer, 1, image.getWidth(), image.getHeight());
+                logStats(result.getTotalProcessingTime());
+
+                byte[] bytes = null;
+                if (!licensePlateMatcher.findMatches(result).isEmpty()) {
+                    bytes = ImageUtil.imageToJpeg(image);
+                }
+
+                final byte[] jpeg = bytes;
+                if (callbackHandler == null) {
+                    callback.onComplete(jpeg, result);
+                } else {
+                    callbackHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            callback.onComplete(jpeg, result);
+                        }
+                    });
+                }
+            } finally {
+                recognitionSemaphore.release();
+                if (image != null) {
+                    image.close();
+                }
+            }
         }
 
         private void logStats(long imgHandlingTime) {
-            Log.d(TAG, "Alpr recognition time: " + imgHandlingTime);
+            Log.d(logTag, "Alpr recognition time: " + imgHandlingTime);
             synchronized (AlprHandler.this) {
-                if (handlingStartTime == 0) {
-                    handlingStartTime = System.currentTimeMillis();
-                } else {
-                    handledImageCounter++;
-                    float pace = handledImageCounter / ((System.currentTimeMillis() - handlingStartTime) / 1000f);
-                    Log.d(TAG, "Image handling pace (img/sec): " + decimalFormat.format(pace));
+                handledImageCounter++;
+                handlingTime += imgHandlingTime;
+                float pace = handledImageCounter / (handlingTime / 1000f);
+                Log.d(logTag, "Image handling pace (img/sec): " + decimalFormat.format(pace));
 
-                    if (pace > bestPace) {
-                        bestPace = pace;
-                    }
-                    if (pace < worstPace) {
-                        worstPace = pace;
-                    }
+                imageQueueTimeout = Math.round(THREADS / pace * 100);
+                Log.d(logTag, "Image queue updated set: " + imageQueueTimeout);
 
-                    if (handledImageCounter > 3) { // Skip first 3 frames
-                        avgPace = movingAvg(pace, avgPace, handledImageCounter - 3);
-                    }
-
-                    String statMsg = String.format("Best\\Worst\\Avg pace: %s\\%s\\%s", decimalFormat.format(bestPace), decimalFormat.format(worstPace), decimalFormat.format(avgPace));
-                    Log.d(TAG, statMsg);
+                if (pace > bestPace) {
+                    bestPace = pace;
                 }
+                if (pace < worstPace) {
+                    worstPace = pace;
+                }
+
+                avgPace = movingAvg(pace, avgPace, handledImageCounter);
+                String statMsg = String.format("Best\\Worst\\Avg pace: %s\\%s\\%s", decimalFormat.format(bestPace), decimalFormat.format(worstPace), decimalFormat.format(avgPace));
+                Log.d(logTag, statMsg);
             }
         }
 
