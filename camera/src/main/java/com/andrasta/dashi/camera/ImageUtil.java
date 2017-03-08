@@ -7,18 +7,33 @@ import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
 import android.media.Image;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+
+import com.andrasta.dashi.utils.Preconditions;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 
 @SuppressWarnings("WeakerAccess")
 public class ImageUtil {
-    public static Bitmap imageToBitmap(Image image) {
-        byte[] data = imageToJpeg(image);
-        return BitmapFactory.decodeByteArray(data, 0, data.length);
+    private static final int JPEG_QUALITY = 80;
+
+    private ImageUtil() {
+        super();
     }
 
-    public static byte[] imageToJpeg(Image image) {
+    public static Bitmap imageToBitmap(@NonNull Image image) {
+        return imageToBitmap(image, null);
+    }
+
+    public static Bitmap imageToBitmap(@NonNull Image image, @Nullable BitmapFactory.Options options) {
+        byte[] data = imageToJpeg(image);
+        return BitmapFactory.decodeByteArray(data, 0, data.length, options);
+    }
+
+    public static byte[] imageToJpeg(@NonNull Image image) {
+        Preconditions.assertReturnNotNull(image, "image");
         byte[] data = null;
         if (image.getFormat() == ImageFormat.JPEG) {
             Image.Plane[] planes = image.getPlanes();
@@ -33,7 +48,9 @@ public class ImageUtil {
         return data;
     }
 
-    public static byte[] YUV420888toNV21(Image image) {
+    public static byte[] YUV420888toNV21(@NonNull Image image) {
+        Preconditions.assertReturnNotNull(image, "image");
+
         byte[] nv21;
         ByteBuffer yBuffer = image.getPlanes()[0].getBuffer();
         ByteBuffer uBuffer = image.getPlanes()[1].getBuffer();
@@ -55,14 +72,23 @@ public class ImageUtil {
         return nv21;
     }
 
-    public static byte[] NV21toJPEG(byte[] nv21, int width, int height) {
+    public static byte[] NV21toJPEG(@NonNull byte[] nv21, int width, int height) {
+        Preconditions.assertReturnNotNull(nv21, "nv21");
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         YuvImage yuv = new YuvImage(nv21, ImageFormat.NV21, width, height, null);
-        yuv.compressToJpeg(new Rect(0, 0, width, height), 100, out);
+        yuv.compressToJpeg(new Rect(0, 0, width, height), JPEG_QUALITY, out);
         return out.toByteArray();
     }
 
-    private static byte[] toGrayScale(Bitmap bitmap) {
+    public static byte[] bitmapToJpeg(@NonNull Bitmap bitmap) {
+        Preconditions.assertReturnNotNull(bitmap, "bitmap");
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out);
+        return out.toByteArray();
+    }
+
+    public static byte[] toGrayScale(@NonNull Bitmap bitmap) {
+        Preconditions.assertReturnNotNull(bitmap, "bitmap");
 
         final int width = bitmap.getWidth();
         final int height = bitmap.getHeight();

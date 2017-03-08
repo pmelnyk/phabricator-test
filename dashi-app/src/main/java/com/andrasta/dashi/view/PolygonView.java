@@ -1,26 +1,30 @@
 package com.andrasta.dashi.view;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Point;
 import android.support.annotation.UiThread;
 import android.util.AttributeSet;
-import android.view.View;
+import android.util.Log;
+import android.widget.ImageView;
+
+import com.andrasta.dashi.R;
 
 /**
  * Draw specified polygon on drawing surface.
  */
-public class PolygonView extends View {
+@SuppressLint("AppCompatCustomView")
+public class PolygonView extends ImageView {
+    private static final String TAG = "PolygonView";
     private static final float FRAME_LINE_WIDTH = 10f;
 
-    private int ratioWidth = 0;
-    private int ratioHeight = 0;
-
-    private final Paint paint = new Paint();
+    private final Paint polygonPaint = new Paint();
+    private final Paint framePaint = new Paint();
+    private float widthDivider, heightDivider;
+    private int width, height;
     private Point[] polygon;
-    private float wc, hc;
 
     public PolygonView(Context context) {
         this(context, null);
@@ -32,15 +36,27 @@ public class PolygonView extends View {
 
     public PolygonView(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
-        paint.setColor(Color.BLUE);
-        paint.setStrokeWidth(FRAME_LINE_WIDTH);
+        polygonPaint.setColor(getContext().getColor(R.color.colorPrimaryDark));
+        framePaint.setColor(getContext().getColor(R.color.lightBlue));
+        framePaint.setStyle(Paint.Style.STROKE);
+        framePaint.setStrokeWidth(FRAME_LINE_WIDTH * 2);
+        polygonPaint.setStrokeWidth(FRAME_LINE_WIDTH);
+    }
+
+    @UiThread
+    public void setViewSize(int width, int height) {
+        this.width = width;
+        this.height = height;
+        Log.d(TAG, "Size set: " + width + 'x' + height);
     }
 
     @UiThread
     public void setPolygon(int sourceWidth, int sourceHeight, Point[] polygon) {
         this.polygon = polygon;
-        this.wc = 1f * getWidth() / sourceWidth;
-        this.hc = 1f * getHeight() / sourceHeight;
+        this.widthDivider = 1f * width / sourceWidth;
+        this.heightDivider = 1f * height / sourceHeight;
+        Log.d(TAG, "New source resolution: " + sourceWidth + 'x' + sourceHeight);
+        Log.d(TAG, "Ratio set: " + widthDivider + 'x' + heightDivider);
         invalidate();
     }
 
@@ -52,27 +68,16 @@ public class PolygonView extends View {
         }
     }
 
-    public void setAspectRatio(int width, int height) {
-        if (width < 0 || height < 0) {
-            throw new IllegalArgumentException("Size cannot be negative.");
-        }
-        ratioWidth = width;
-        ratioHeight = height;
-        requestLayout();
-    }
-
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        int width = MeasureSpec.getSize(widthMeasureSpec);
-        int height = MeasureSpec.getSize(heightMeasureSpec);
-        if (0 == ratioWidth || 0 == ratioHeight) {
+        if (width == 0 || height == 0) {
             setMeasuredDimension(width, height);
         } else {
-            if (width < height * ratioWidth / ratioHeight) {
-                setMeasuredDimension(width, width * ratioHeight / ratioWidth);
+            if (width > height) {
+                setMeasuredDimension(width, height);
             } else {
-                setMeasuredDimension(height * ratioWidth / ratioHeight, height);
+                setMeasuredDimension(height, width);
             }
         }
     }
@@ -80,15 +85,16 @@ public class PolygonView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        if (polygon == null || polygon.length < 2 || wc == 0 || hc == 0) {
+        if (polygon == null || polygon.length < 2 || widthDivider == 0 || heightDivider == 0) {
             return;
         }
 
         int i;
         for (i = 0; i < polygon.length - 1; i++) {
-            canvas.drawLine(polygon[i].x * wc, polygon[i].y * hc, polygon[i + 1].x * wc, polygon[i + 1].y * hc, paint);
+            canvas.drawLine(polygon[i].x * widthDivider, polygon[i].y * heightDivider, polygon[i + 1].x * widthDivider, polygon[i + 1].y * heightDivider, polygonPaint);
         }
         i = polygon.length - 1;
-        canvas.drawLine(polygon[i].x * wc, polygon[i].y * hc, polygon[0].x * wc, polygon[0].y * hc, paint);
+        canvas.drawLine(polygon[i].x * widthDivider, polygon[i].y * heightDivider, polygon[0].x * widthDivider, polygon[0].y * heightDivider, polygonPaint);
+        canvas.drawRect(0, 0, getWidth(), getHeight(), framePaint);
     }
 }

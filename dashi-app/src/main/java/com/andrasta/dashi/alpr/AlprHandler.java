@@ -1,5 +1,7 @@
 package com.andrasta.dashi.alpr;
 
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.Image;
 import android.os.Handler;
 import android.support.annotation.NonNull;
@@ -50,6 +52,7 @@ public class AlprHandler {
     private final File configFile;
     private final File runtimeDir;
 
+    private final BitmapFactory.Options bitmapOptions = new BitmapFactory.Options();
     private long imageQueueTimeout;
     private long lastImageQueueTime;
     private long handledImageCounter;
@@ -74,7 +77,7 @@ public class AlprHandler {
         this.callback = callback;
     }
 
-    private void checkAlprConfiguration(File configFile, File runtimeDir) {
+    private void checkAlprConfiguration(@NonNull File configFile, @NonNull File runtimeDir) {
         if (!configFile.exists() || !configFile.isFile()) {
             throw new RuntimeException("No alpr config file " + configFile.getAbsolutePath());
         }
@@ -155,6 +158,11 @@ public class AlprHandler {
         }
     }
 
+    public synchronized void setBitmapSize(int width, int height) {
+        bitmapOptions.outHeight = height;
+        bitmapOptions.outWidth = width;
+    }
+
     @SuppressWarnings("FieldCanBeLocal")
     private final class ImageHandler implements Runnable {
         private final AtomicBoolean stop = new AtomicBoolean(false);
@@ -192,34 +200,32 @@ public class AlprHandler {
             Log.d(logTag, "ImageHandler terminated.");
         }
 
-        private void recognize(Alpr alpr, Image image) throws InterruptedException {
+        private void recognize(@NonNull Alpr alpr, @NonNull Image image) throws InterruptedException {
             try {
                 recognitionSemaphore.acquire();
                 ByteBuffer yBuffer = image.getPlanes()[0].getBuffer(); // Y channel
                 final AlprResult result = alpr.recognizeFromByteBuffer(yBuffer, 1, image.getWidth(), image.getHeight());
                 logStats(result.getTotalProcessingTime());
 
-                byte[] bytes = null;
-                if (!licensePlateMatcher.findMatches(result).isEmpty()) {
-                    bytes = ImageUtil.imageToJpeg(image);
+                Bitmap bitmap = null;
+                if (!result.getPlates().isEmpty() && bitmapOptions.outWidth > 0) {
+                    bitmap = ImageUtil.imageToBitmap(image, bitmapOptions);
                 }
 
-                final byte[] jpeg = bytes;
                 if (callbackHandler == null) {
-                    callback.onComplete(jpeg, result);
+                    callback.onComplete(bitmap, result);
                 } else {
+                    final Bitmap b = bitmap;
                     callbackHandler.post(new Runnable() {
                         @Override
                         public void run() {
-                            callback.onComplete(jpeg, result);
+                            callback.onComplete(b, result);
                         }
                     });
                 }
             } finally {
                 recognitionSemaphore.release();
-                if (image != null) {
-                    image.close();
-                }
+                image.close();
             }
         }
 
@@ -257,8 +263,8 @@ public class AlprHandler {
     }
 
     public static interface AlprCallback {
-        void onFailure(Exception failure);
+        void onFailure(@NonNull Exception failure);
 
-        void onComplete(byte[] bytes, AlprResult result);
+        void onComplete(@Nullable Bitmap bitmap, @NonNull AlprResult result);
     }
 }

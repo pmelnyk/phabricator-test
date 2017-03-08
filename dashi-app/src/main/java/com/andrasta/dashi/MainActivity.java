@@ -7,6 +7,7 @@ import android.app.DialogFragment;
 import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
@@ -43,6 +44,7 @@ import com.andrasta.dashi.camera.Camera.CameraListener;
 import com.andrasta.dashi.camera.CameraConfig;
 import com.andrasta.dashi.camera.CameraUtils;
 import com.andrasta.dashi.camera.ImageSaver;
+import com.andrasta.dashi.camera.ImageUtil;
 import com.andrasta.dashi.location.LocationHelper;
 import com.andrasta.dashi.openalpr.AlprResult;
 import com.andrasta.dashi.openalpr.Plate;
@@ -69,6 +71,7 @@ import static com.andrasta.dashi.utils.SharedPreferencesHelper.KEY_CAMERA_ROTATI
 public class MainActivity extends AppCompatActivity implements CameraListener {
     private static final String TAG = "MainActivity";
     private static final int RECOGNITION_HISTORY_SIZE = 10;
+    private static final float PLATE_FRAME_SIZE_FRACTION = 0.3f;
 
     private final SimpleDateFormat dateFormat = new SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault());
     private final File imageDestination = new File(Environment.getExternalStorageDirectory(), "pic.jpg");
@@ -92,7 +95,7 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
     private Spinner spinner;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
         prefs = new SharedPreferencesHelper(this);
         setupOrientation();
         super.onCreate(savedInstanceState);
@@ -100,6 +103,12 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
 
         ((DrawerLayout) findViewById(R.id.drawer)).openDrawer(Gravity.LEFT);
         polygonView = (PolygonView) findViewById(R.id.plate_polygon);
+        polygonView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                v.setVisibility(View.INVISIBLE);
+            }
+        });
         recognitionResult = (TextView) findViewById(R.id.recognition_result);
         recognitionResult.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -123,6 +132,7 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
                 Size size = (Size) parent.getAdapter().getItem(position);
                 if (!cameraRecSize.equals(size)) {
                     cameraRecSize = size;
+                    updatePolygonView();
                     camera.close();
                     alprHandler.stop();
                     openCamera(textureView.getWidth(), textureView.getHeight());
@@ -154,9 +164,17 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
             throw new RuntimeException("No camera sizes");
         }
         cameraRecSize = pair.second.get(0);
+        updatePolygonView();
         ArrayAdapter<Size> adapter = new ArrayAdapter<>(this, R.layout.simple_spinner_item, pair.second);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinner.setAdapter(adapter);
+    }
+
+    private void updatePolygonView() {
+        int width = (int) (display.getWidth() * PLATE_FRAME_SIZE_FRACTION);
+        int height = (int) (width / (1f * cameraRecSize.getWidth() / cameraRecSize.getHeight()));
+        polygonView.setViewSize(width, height);
+        alprHandler.setBitmapSize(width, height);
     }
 
     private void setupOrientation() {
@@ -198,10 +216,8 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
             int orientation = this.getResources().getConfiguration().orientation;
             if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
                 textureView.setAspectRatio(cameraWidth, cameraHeight);
-                polygonView.setAspectRatio(cameraWidth, cameraHeight);
             } else {
                 textureView.setAspectRatio(cameraHeight, cameraWidth);
-                polygonView.setAspectRatio(cameraHeight, cameraWidth);
             }
             Matrix matrix = CameraUtils.configureTransform(display.getRotation(), width, height, cameraWidth, cameraHeight);
             textureView.setTransform(matrix);
@@ -277,23 +293,24 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
         private final Date date = new Date();
 
         @Override
-        public void onComplete(byte[] imageAsJpeg, AlprResult alprResult) {
+        public void onComplete(@Nullable Bitmap bitmap, @NonNull AlprResult alprResult) {
             Log.d(TAG, "AlprResult: " + alprResult);
 
             List<Pair<Plate, LicensePlate>> matches = licensePlateMatcher.findMatches(alprResult);
             Log.d(TAG, "Matches found : " + matches.size());
 
             PlateResult bestResult = getFirstBestPlate(alprResult);
-            showResult(alprResult.getSourceWidth(), alprResult.getSourceHeight(), bestResult);
+            showResult(bitmap, alprResult.getSourceWidth(), alprResult.getSourceHeight(), bestResult);
 
             Location lastKnownLocation = locationHelper.getLastKnownLocation();
 
             for (Pair<Plate, LicensePlate> match : matches) {
-                licensePlateMatcher.sendMatch(match, imageAsJpeg, lastKnownLocation);
+                licensePlateMatcher.sendMatch(match, ImageUtil.bitmapToJpeg(bitmap), lastKnownLocation);
             }
         }
 
-        private PlateResult getFirstBestPlate(AlprResult alprResult) {
+        @Nullable
+        private PlateResult getFirstBestPlate(@NonNull AlprResult alprResult) {
             List<PlateResult> results = alprResult.getPlates();
             if (results.size() > 0) {
                 PlateResult plate = results.get(0);
@@ -304,14 +321,19 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
             return null;
         }
 
-        private void showResult(final int sourceWidth, final int sourceHeight, final PlateResult plate) {
-            if (plate != null) {
+        private void showResult(@Nullable Bitmap bitmap, final int sourceWidth, final int sourceHeight, @Nullable final PlateResult plate) {
+            if (plate != null && plate.getBestPlate() != null) {
                 Log.d(TAG, "Best result: " + plate.getBestPlate().getPlate());
                 printResultsBuffer.add(getResultLine(plate.getBestPlate()));
+                polygonView.setVisibility(View.VISIBLE);
+                polygonView.setImageBitmap(bitmap);
+                if (polygonView.getTag() != null) {
+                    ((Bitmap) polygonView.getTag()).recycle();
+                }
+                polygonView.setTag(bitmap);
                 polygonView.setPolygon(sourceWidth, sourceHeight, plate.getPlateCoordinates());
             } else {
                 printResultsBuffer.add("");
-                polygonView.clear();
             }
 
             final StringBuilder sb = new StringBuilder();
@@ -323,7 +345,8 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
             recognitionResult.setText(Html.fromHtml(sb.toString()));
         }
 
-        private String getResultLine(Plate plate) {
+        @NonNull
+        private String getResultLine(@NonNull Plate plate) {
             final String template = "<font color='#FFFFFF'>%s conf: %s%%&nbsp;&nbsp;&nbsp;&nbsp;</font><big><font color='#BBBBFF'>%s</font></big>";
             date.setTime(System.currentTimeMillis());
             return String.format(template, dateFormat.format(date), Math.round(plate.getConfidence()), plate.getPlate());
@@ -338,7 +361,8 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
     public static class ExitDialog extends DialogFragment {
         private static final String ARG_MESSAGE = "message";
 
-        public static ExitDialog newInstance(String message) {
+        public static ExitDialog newInstance(@NonNull String message) {
+            Preconditions.assertReturnNotNull(message, "message");
             ExitDialog dialog = new ExitDialog();
             Bundle args = new Bundle();
             args.putString(ARG_MESSAGE, message);
