@@ -11,6 +11,8 @@ import android.util.Log;
 import com.andrasta.dashi.camera.ImageUtil;
 import com.andrasta.dashi.openalpr.Alpr;
 import com.andrasta.dashi.openalpr.AlprResult;
+import com.andrasta.dashi.openalpr.LaneDetector;
+import com.andrasta.dashi.openalpr.LaneDetectorResult;
 import com.andrasta.dashi.utils.Preconditions;
 
 import java.io.File;
@@ -44,6 +46,7 @@ public class ImageHandler {
     private final ExecutorService executor = Executors.newFixedThreadPool(THREADS);
     private final ImageHandlerThread[] imageHandlers = new ImageHandlerThread[THREADS];
     private final Semaphore recognitionSemaphore = new Semaphore(THREADS);
+    private final LaneDetector laneDetector = new LaneDetector();
     private final ImageHandlerCallback callback;
     private final Handler callbackHandler;
     private final File configFile;
@@ -178,7 +181,22 @@ public class ImageHandler {
                         continue;
                     }
 
-                    recognize(alpr, image);
+                    try {
+                        recognitionSemaphore.acquire();
+                        ByteBuffer yBuffer = image.getPlanes()[0].getBuffer(); // Y channel
+                        if (yBuffer == null || yBuffer.remaining() == 0) {
+                            Log.e(logTag, "No yBuffer for image " + image);
+                            continue;
+                        }
+                        recognizeLicensePlate(alpr, image, yBuffer);
+                        recognizeLanes(alpr, image, yBuffer);
+                    } catch (IllegalStateException e) {
+                        Log.w(logTag, "Image closed. Stop recognition.");
+                    } finally {
+                        recognitionSemaphore.release();
+                        image.close();
+                    }
+
                     if (stop.get()) {
                         break;
                     }
@@ -196,34 +214,45 @@ public class ImageHandler {
             Log.d(logTag, "ImageHandler terminated.");
         }
 
-        private void recognize(@NonNull Alpr alpr, @NonNull Image image) throws InterruptedException {
-            try {
-                recognitionSemaphore.acquire();
-                ByteBuffer yBuffer = image.getPlanes()[0].getBuffer(); // Y channel
-                final AlprResult result = alpr.recognizeFromByteBuffer(yBuffer, 1, image.getWidth(), image.getHeight());
-                logStats(result.getTotalProcessingTime());
+        private void recognizeLicensePlate(@NonNull Alpr alpr, @NonNull Image image, @NonNull ByteBuffer yBuffer) throws InterruptedException {
+            final AlprResult result = alpr.recognizeFromByteBuffer(yBuffer, 1, image.getWidth(), image.getHeight());
+            logStats(result.getTotalProcessingTime());
 
-                Bitmap bitmap = null;
-                if (!result.getPlates().isEmpty() && bitmapOptions.outWidth > 0) {
-                    bitmap = ImageUtil.imageToBitmap(image, bitmapOptions);
-                }
+            Bitmap bitmap = null;
+            if (!result.getPlates().isEmpty() && bitmapOptions.outWidth > 0) {
+                bitmap = ImageUtil.imageToBitmap(image, bitmapOptions);
+            }
 
-                if (callbackHandler == null) {
-                    callback.onComplete(bitmap, result);
-                } else {
-                    final Bitmap b = bitmap;
-                    callbackHandler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            callback.onComplete(b, result);
-                        }
-                    });
-                }
-            } catch (IllegalStateException e) {
-                Log.w(logTag, "Image closed. Stop recognition.");
-            } finally {
-                recognitionSemaphore.release();
-                image.close();
+            if (callbackHandler == null) {
+                callback.onLicensePlateDetected(bitmap, result);
+            } else {
+                final Bitmap b = bitmap;
+                callbackHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        callback.onLicensePlateDetected(b, result);
+                    }
+                });
+            }
+        }
+
+        private void recognizeLanes(@NonNull Alpr alpr, @NonNull Image image, @NonNull ByteBuffer yBuffer) throws InterruptedException {
+            long time = System.currentTimeMillis();
+            final LaneDetectorResult lanes = laneDetector.recognizeLaneFromByteBuffer(yBuffer, 1, image.getWidth(), image.getHeight());
+            time = System.currentTimeMillis() - time;
+            Log.d(logTag, "Lane detection: " + time + '\t' + lanes);
+            final int imageWidth = image.getWidth();
+            final int imageHeight = image.getHeight();
+
+            if (callbackHandler == null) {
+                callback.onLaneDetected(imageWidth, imageHeight, lanes);
+            } else {
+                callbackHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        callback.onLaneDetected(imageWidth, imageHeight, lanes);
+                    }
+                });
             }
         }
 
@@ -263,6 +292,8 @@ public class ImageHandler {
     public static interface ImageHandlerCallback {
         void onFailure(@NonNull Exception failure);
 
-        void onComplete(@Nullable Bitmap bitmap, @NonNull AlprResult result);
+        void onLicensePlateDetected(@Nullable Bitmap bitmap, @NonNull AlprResult result);
+
+        void onLaneDetected(int width, int height, @NonNull LaneDetectorResult lanes);
     }
 }

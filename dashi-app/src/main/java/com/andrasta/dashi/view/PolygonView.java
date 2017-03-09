@@ -5,12 +5,14 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Point;
+import android.support.annotation.NonNull;
 import android.support.annotation.UiThread;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.widget.ImageView;
 
 import com.andrasta.dashi.R;
+import com.andrasta.dashi.utils.Preconditions;
 
 /**
  * Draw specified polygon on drawing surface.
@@ -51,7 +53,8 @@ public class PolygonView extends ImageView {
     }
 
     @UiThread
-    public void setPolygon(int sourceWidth, int sourceHeight, Point[] polygon) {
+    public void setPolygon(int sourceWidth, int sourceHeight, @NonNull Point[] polygon) {
+        Preconditions.assertReturnNotNull(polygon, "polygon");
         this.polygon = polygon;
         this.widthDivider = 1f * width / sourceWidth;
         this.heightDivider = 1f * height / sourceHeight;

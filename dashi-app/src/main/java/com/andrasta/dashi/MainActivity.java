@@ -47,6 +47,7 @@ import com.andrasta.dashi.camera.ImageSaver;
 import com.andrasta.dashi.camera.ImageUtil;
 import com.andrasta.dashi.location.LocationHelper;
 import com.andrasta.dashi.openalpr.AlprResult;
+import com.andrasta.dashi.openalpr.LaneDetectorResult;
 import com.andrasta.dashi.openalpr.Plate;
 import com.andrasta.dashi.openalpr.PlateResult;
 import com.andrasta.dashi.service.LicensePlateMatcher;
@@ -54,6 +55,7 @@ import com.andrasta.dashi.utils.CyclicBuffer;
 import com.andrasta.dashi.utils.Preconditions;
 import com.andrasta.dashi.utils.SharedPreferencesHelper;
 import com.andrasta.dashi.view.AutoFitTextureView;
+import com.andrasta.dashi.view.LaneView;
 import com.andrasta.dashi.view.PolygonView;
 import com.andrasta.dashiclient.LicensePlate;
 
@@ -92,6 +94,7 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
     private AutoFitTextureView textureView;
     private TextView recognitionResult;
     private PolygonView polygonView;
+    private LaneView laneView;
     private Spinner spinner;
 
     @Override
@@ -102,7 +105,8 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
         setContentView(R.layout.activity_main);
 
         ((DrawerLayout) findViewById(R.id.drawer)).openDrawer(Gravity.LEFT);
-        polygonView = (PolygonView) findViewById(R.id.plate_polygon);
+        laneView = (LaneView) findViewById(R.id.lane_view);
+        polygonView = (PolygonView) findViewById(R.id.plate_frame);
         polygonView.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -216,8 +220,10 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
             int orientation = this.getResources().getConfiguration().orientation;
             if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
                 textureView.setAspectRatio(cameraWidth, cameraHeight);
+                laneView.setAspectRatio(cameraWidth, cameraHeight);
             } else {
                 textureView.setAspectRatio(cameraHeight, cameraWidth);
+                laneView.setAspectRatio(cameraHeight, cameraWidth);
             }
             Matrix matrix = CameraUtils.configureTransform(display.getRotation(), width, height, cameraWidth, cameraHeight);
             textureView.setTransform(matrix);
@@ -293,7 +299,7 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
         private final Date date = new Date();
 
         @Override
-        public void onComplete(@Nullable Bitmap bitmap, @NonNull AlprResult alprResult) {
+        public void onLicensePlateDetected(@Nullable Bitmap bitmap, @NonNull AlprResult alprResult) {
             Log.d(TAG, "AlprResult: " + alprResult);
 
             List<Pair<Plate, LicensePlate>> matches = licensePlateMatcher.findMatches(alprResult);
@@ -306,6 +312,15 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
 
             for (Pair<Plate, LicensePlate> match : matches) {
                 licensePlateMatcher.sendMatch(match, ImageUtil.bitmapToJpeg(bitmap), lastKnownLocation);
+            }
+        }
+
+        @Override
+        public void onLaneDetected(int width, int height, @NonNull LaneDetectorResult lanes) {
+            if (lanes.isEmpty()) {
+                laneView.clear();
+            } else {
+                laneView.setLanes(width, height, lanes);
             }
         }
 

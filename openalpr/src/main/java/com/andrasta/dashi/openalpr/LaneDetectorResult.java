@@ -32,6 +32,15 @@ public final class LaneDetectorResult {
         return Collections.unmodifiableList(Arrays.asList(plateCoordinates));
     }
 
+    public boolean isEmpty() {
+        for (int i = 0; i < plateCoordinates.length; i++) {
+            if (plateCoordinates[i].x != 0 || plateCoordinates[i].y != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     @Override
     public String toString() {
         return "LaneDetectorResult{" +
