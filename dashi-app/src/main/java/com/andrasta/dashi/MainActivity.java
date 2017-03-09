@@ -38,7 +38,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.andrasta.dashi.alpr.AlprHandler;
+import com.andrasta.dashi.alpr.ImageHandler;
 import com.andrasta.dashi.camera.Camera;
 import com.andrasta.dashi.camera.Camera.CameraListener;
 import com.andrasta.dashi.camera.CameraConfig;
@@ -80,7 +80,7 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
     private final LocationHelper locationHelper = new LocationHelper();
     private LicensePlateMatcher licensePlateMatcher;
     private SharedPreferencesHelper prefs;
-    private AlprHandler alprHandler;
+    private ImageHandler alprHandler;
 
     private final ImageSaver imageSaver = new ImageSaver();
     private CameraConfig.Builder configBuilder;
@@ -148,7 +148,7 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
         display = getWindowManager().getDefaultDisplay();
         licensePlateMatcher = LicensePlateMatcher.getInstance(prefs);
         File configDir = new File(prefs.getString(KEY_ALPR_CONFIG_DIR, null));
-        alprHandler = new AlprHandler(configDir, alprCallback, licensePlateMatcher, new Handler());
+        alprHandler = new ImageHandler(configDir, imageHandlerCallback, new Handler());
         camera = new Camera(this, this);
         createCameraSizesAdapter();
         try {
@@ -289,7 +289,7 @@ public class MainActivity extends AppCompatActivity implements CameraListener {
         }
     }
 
-    private final AlprHandler.AlprCallback alprCallback = new AlprHandler.AlprCallback() {
+    private final ImageHandler.ImageHandlerCallback imageHandlerCallback = new ImageHandler.ImageHandlerCallback() {
         private final Date date = new Date();
 
         @Override

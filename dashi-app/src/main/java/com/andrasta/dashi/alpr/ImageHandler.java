@@ -11,7 +11,6 @@ import android.util.Log;
 import com.andrasta.dashi.camera.ImageUtil;
 import com.andrasta.dashi.openalpr.Alpr;
 import com.andrasta.dashi.openalpr.AlprResult;
-import com.andrasta.dashi.service.LicensePlateMatcher;
 import com.andrasta.dashi.utils.Preconditions;
 
 import java.io.File;
@@ -25,14 +24,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Creates number of threads specified in {@link AlprHandler#THREADS} to recognize
- * license plates on images posted through {@link AlprHandler#recognize(Image)} method.
+ * Creates number of threads specified in {@link ImageHandler#THREADS} to recognize
+ * license plates on images posted through {@link ImageHandler#recognize(Image)} method.
  * <p>
  * Class takes care about closing {@link Image} after recognition.
  * Class is threadsafe.
  */
-public class AlprHandler {
-    private static final String TAG = "AlprHandler";
+public class ImageHandler {
+    private static final String TAG = "ImageHandler";
 
     private static final DecimalFormat decimalFormat = new DecimalFormat("0.##");
     private static final int THREADS = Runtime.getRuntime().availableProcessors();
@@ -43,11 +42,9 @@ public class AlprHandler {
 
     private final ArrayBlockingQueue<Image> imageQueue = new ArrayBlockingQueue<Image>(THREADS * 2);
     private final ExecutorService executor = Executors.newFixedThreadPool(THREADS);
-    private final ImageHandler[] imageHandlers = new ImageHandler[THREADS];
+    private final ImageHandlerThread[] imageHandlers = new ImageHandlerThread[THREADS];
     private final Semaphore recognitionSemaphore = new Semaphore(THREADS);
-    private final AlprCallback callback;
-    @NonNull
-    private final LicensePlateMatcher licensePlateMatcher;
+    private final ImageHandlerCallback callback;
     private final Handler callbackHandler;
     private final File configFile;
     private final File runtimeDir;
@@ -61,19 +58,17 @@ public class AlprHandler {
     private float bestPace;
     private float avgPace;
 
-    public AlprHandler(@NonNull File configDir, @NonNull AlprCallback callback, @NonNull LicensePlateMatcher licensePlateMatcher) {
-        this(configDir, callback, licensePlateMatcher, null);
+    public ImageHandler(@NonNull File configDir, @NonNull ImageHandlerCallback callback) {
+        this(configDir, callback, null);
     }
 
-    public AlprHandler(@NonNull File configDir, @NonNull AlprCallback callback, @NonNull LicensePlateMatcher licensePlateMatcher, @Nullable Handler callbackHandler) {
+    public ImageHandler(@NonNull File configDir, @NonNull ImageHandlerCallback callback, @Nullable Handler callbackHandler) {
         Preconditions.assertParameterNotNull(configDir, "configDir");
         Preconditions.assertParameterNotNull(callback, "callback");
-        Preconditions.assertParameterNotNull(licensePlateMatcher, "licensePlateMatcher");
         configFile = new File(configDir, CONFIG_FILE_NAME);
         runtimeDir = new File(configDir, RUNTIME_DIR);
         checkAlprConfiguration(configFile, runtimeDir);
         this.callbackHandler = callbackHandler;
-        this.licensePlateMatcher = licensePlateMatcher;
         this.callback = callback;
     }
 
@@ -124,7 +119,7 @@ public class AlprHandler {
             Log.d(TAG, "Handler started. Threads num:" + THREADS);
             resetTimeoutsAndStatistics();
             for (int i = 0; i < THREADS; i++) {
-                imageHandlers[i] = new ImageHandler();
+                imageHandlers[i] = new ImageHandlerThread();
                 executor.execute(imageHandlers[i]);
             }
         }
@@ -164,7 +159,7 @@ public class AlprHandler {
     }
 
     @SuppressWarnings("FieldCanBeLocal")
-    private final class ImageHandler implements Runnable {
+    private final class ImageHandlerThread implements Runnable {
         private final AtomicBoolean stop = new AtomicBoolean(false);
         private String logTag;
 
@@ -234,7 +229,7 @@ public class AlprHandler {
 
         private void logStats(long imgHandlingTime) {
             Log.d(logTag, "Alpr recognition time: " + imgHandlingTime);
-            synchronized (AlprHandler.this) {
+            synchronized (ImageHandler.this) {
                 handledImageCounter++;
                 handlingTime += imgHandlingTime;
                 float pace = handledImageCounter / (handlingTime / 1000f);
@@ -265,7 +260,7 @@ public class AlprHandler {
         return (Math.abs(value) + ((counter - 1) * avg)) / counter;
     }
 
-    public static interface AlprCallback {
+    public static interface ImageHandlerCallback {
         void onFailure(@NonNull Exception failure);
 
         void onComplete(@Nullable Bitmap bitmap, @NonNull AlprResult result);
