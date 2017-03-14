@@ -196,6 +196,7 @@ public class AlprHandler {
                 if (image != null) {
                     image.close();
                 }
+                alpr.close();
             }
             Log.d(logTag, "ImageHandler terminated.");
         }
@@ -223,6 +224,8 @@ public class AlprHandler {
                         }
                     });
                 }
+            } catch (IllegalStateException e) {
+                Log.w(logTag, "Image closed. Stop recognition.");
             } finally {
                 recognitionSemaphore.release();
                 image.close();

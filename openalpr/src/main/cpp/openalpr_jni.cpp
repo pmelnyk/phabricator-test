@@ -114,8 +114,12 @@ static jobject createJPlateResult(JNIEnv *env, const AlprPlateResult& alprPlateR
 
 }
 
-
-
+void sigsegvHandler(int signo) {
+    if (signo == SIGSEGV) {
+        printf("SIGSEGV received: %d\nExit alpr", signo);
+        exit(0);
+    }
+}
 
 static const char* ALPR_RESULT_CLASS_NAME = "com/andrasta/dashi/openalpr/AlprResult";
 static const char* ALPR_RESULT_CONSTRUCTOR_SIG = "([Lcom/andrasta/dashi/openalpr/PlateResult;III)V";
@@ -189,6 +193,7 @@ JNIEXPORT jobject JNICALL
 Java_com_andrasta_dashi_openalpr_Alpr_nRecognizeByteBuffer(JNIEnv *env, jclass type,
                                                            jlong nativeReference, jobject byteBuffer,
                                                            jint pixelSize, jint width, jint height) {
+    signal(SIGSEGV, sigsegvHandler);
     return withAlpr<jobject>(env, nativeReference, [&](auto alpr) {
         auto directBuffer = env->GetDirectBufferAddress(byteBuffer);
         if (directBuffer) {

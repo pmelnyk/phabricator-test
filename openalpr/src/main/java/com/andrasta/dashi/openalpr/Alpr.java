@@ -5,13 +5,14 @@ import android.support.annotation.Nullable;
 
 import com.andrasta.dashi.utils.Preconditions;
 
+import java.io.Closeable;
 import java.nio.ByteBuffer;
 
 /**
  * Created by breh on 2/14/17.
  */
 
-public final class Alpr {
+public final class Alpr implements Closeable {
 
     private final long nativeReference;
 
@@ -44,7 +45,7 @@ public final class Alpr {
     }
 
     @Override
-    protected void finalize() throws Throwable {
+    public void close() {
         nDelete(nativeReference);
     }
 
