@@ -27,7 +27,8 @@ android {
             // FIXME - point to the proper the dir to non debug version for the release
             jniLibs.srcDirs = ['../openalpr/build/intermediates/bundles/debug/jni',
                     '../openalpr/jni_tess',
-                    '../openalpr/jni_openalpr'
+                    '../openalpr/jni_openalpr',
+                    'libs'
             ]
         }
     }

@@ -25,12 +25,16 @@
         android:theme="@style/Theme.AppCompat.NoActionBar">
         <activity
             android:name=".MainActivity"
-            android:screenOrientation="landscape">
+            android:screenOrientation="portrait">
 
         </activity>
+
+        <activity android:name=".tensorflow.DetectorActivity"
+            android:screenOrientation="portrait"
+            />
         <activity
             android:name=".SplashActivity"
-            android:screenOrientation="landscape">
+            android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
 

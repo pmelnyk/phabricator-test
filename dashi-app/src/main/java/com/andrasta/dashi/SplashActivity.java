@@ -12,6 +12,7 @@ import android.support.v4.app.ActivityCompat.OnRequestPermissionsResultCallback;
 import android.util.Log;
 
 import com.andrasta.dashi.service.LicensePlateMatcher;
+import com.andrasta.dashi.tensorflow.DetectorActivity;
 import com.andrasta.dashi.utils.FileUtils;
 import com.andrasta.dashi.utils.PermissionsHelper;
 import com.andrasta.dashi.utils.SharedPreferencesHelper;
@@ -64,8 +65,8 @@ public class SplashActivity extends Activity implements OnRequestPermissionsResu
     private void startMainActivity() {
         Log.d(TAG, "Start main activity");
         prefs.setBoolean(KEY_APP_INITIALIZED, true);
-        startActivity(new Intent(this, MainActivity.class));
-        finish();
+        startActivity(new Intent(this, DetectorActivity.class));
+//        finish();
     }
 
     private boolean checkPermissions() {
