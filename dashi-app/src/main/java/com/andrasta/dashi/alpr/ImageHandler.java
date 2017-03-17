@@ -13,6 +13,7 @@ import com.andrasta.dashi.openalpr.Alpr;
 import com.andrasta.dashi.openalpr.AlprResult;
 import com.andrasta.dashi.openalpr.LaneDetector;
 import com.andrasta.dashi.openalpr.LaneDetectorResult;
+import com.andrasta.dashi.openalpr.RegionOfInterest;
 import com.andrasta.dashi.utils.Preconditions;
 
 import java.io.File;
@@ -215,7 +216,7 @@ public class ImageHandler {
         }
 
         private void recognizeLicensePlate(@NonNull Alpr alpr, @NonNull Image image, @NonNull ByteBuffer yBuffer) throws InterruptedException {
-            final AlprResult result = alpr.recognizeFromByteBuffer(yBuffer, 1, image.getWidth(), image.getHeight());
+            final AlprResult result = alpr.recognizeFromByteBuffer(yBuffer, 1, image.getWidth(), image.getHeight(), getRegionOfInterest(image));
             logStats(result.getTotalProcessingTime());
 
             Bitmap bitmap = null;
@@ -265,7 +266,7 @@ public class ImageHandler {
                 Log.d(logTag, "Image handling pace (img/sec): " + decimalFormat.format(pace));
 
                 imageQueueTimeout = Math.round(THREADS / pace * 100);
-                Log.d(logTag, "Image queue updated set: " + imageQueueTimeout);
+                Log.d(logTag, "Image queue timeout updated: " + imageQueueTimeout);
 
                 if (pace > bestPace) {
                     bestPace = pace;
@@ -282,6 +283,13 @@ public class ImageHandler {
 
         void stop() {
             this.stop.set(true);
+        }
+
+        private RegionOfInterest getRegionOfInterest(@NonNull Image image) {
+            RegionOfInterest regionOfInterest = RegionOfInterest.calculateRecognitionRegion(image.getWidth(), image.getHeight());
+            Log.d(TAG, "Image size: " + image.getWidth() + 'x' + image.getHeight());
+            Log.d(TAG, "RegionOfInterest set: " + regionOfInterest);
+            return regionOfInterest;
         }
     }
 
