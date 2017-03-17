@@ -121,6 +121,35 @@ void sigsegvHandler(int signo) {
     }
 }
 
+static jclass regionOfInterestClass;
+static jfieldID regionOfInterestX;
+static jfieldID regionOfInterestY;
+static jfieldID regionOfInterestWidth;
+static jfieldID regionOfInterestHeight;
+
+vector<AlprRegionOfInterest> getRegionOfInterest(JNIEnv *env, const jobject &regionOfInterest) {
+    vector<AlprRegionOfInterest> res = vector<AlprRegionOfInterest>();
+    if (regionOfInterest != NULL) {
+        if (regionOfInterestClass == NULL) {
+            regionOfInterestClass = env->GetObjectClass(regionOfInterest);
+            regionOfInterestX = env->GetFieldID(regionOfInterestClass, "x", "I");
+            regionOfInterestY = env->GetFieldID(regionOfInterestClass, "y", "I");
+            regionOfInterestWidth = env->GetFieldID(regionOfInterestClass, "width", "I");
+            regionOfInterestHeight = env->GetFieldID(regionOfInterestClass, "height", "I");
+        }
+
+        int y = env->GetIntField(regionOfInterest, regionOfInterestX);
+        int x = env->GetIntField(regionOfInterest, regionOfInterestY);
+        int width = env->GetIntField(regionOfInterest, regionOfInterestWidth);
+        int height = env->GetIntField(regionOfInterest, regionOfInterestHeight);
+
+        AlprRegionOfInterest aroi = AlprRegionOfInterest(x, y, width, height);
+        printf("AlprRegionOfInterest added: %dx%d/%dx%d\n", aroi.x, aroi.y, aroi.width, aroi.height);
+        res.push_back(aroi);
+    }
+    return res;
+}
+
 static const char* ALPR_RESULT_CLASS_NAME = "com/andrasta/dashi/openalpr/AlprResult";
 static const char* ALPR_RESULT_CONSTRUCTOR_SIG = "([Lcom/andrasta/dashi/openalpr/PlateResult;III)V";
 static JConstructor alprResultsConstructor = JConstructor(ALPR_RESULT_CLASS_NAME, ALPR_RESULT_CONSTRUCTOR_SIG);
@@ -192,7 +221,8 @@ Java_com_andrasta_dashi_openalpr_Alpr_nRecognizeByteArray(JNIEnv *env, jclass ty
 JNIEXPORT jobject JNICALL
 Java_com_andrasta_dashi_openalpr_Alpr_nRecognizeByteBuffer(JNIEnv *env, jclass type,
                                                            jlong nativeReference, jobject byteBuffer,
-                                                           jint pixelSize, jint width, jint height) {
+                                                           jint pixelSize, jint width, jint height,
+                                                           jobject regionOfInterest) {
     signal(SIGSEGV, sigsegvHandler);
     return withAlpr<jobject>(env, nativeReference, [&](auto alpr) {
         auto directBuffer = env->GetDirectBufferAddress(byteBuffer);

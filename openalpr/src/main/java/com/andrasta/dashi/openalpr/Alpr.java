@@ -40,8 +40,12 @@ public final class Alpr implements Closeable {
     }
 
     public @NonNull AlprResult recognizeFromByteBuffer(@NonNull ByteBuffer byteBuffer,  int pixelSize, int width, int height) {
+        return nRecognizeByteBuffer(nativeReference, byteBuffer, pixelSize, width, height, null);
+    }
+
+    public @NonNull AlprResult recognizeFromByteBuffer(@NonNull ByteBuffer byteBuffer,  int pixelSize, int width, int height, @Nullable RegionOfInterest regionOfInterest) {
         Preconditions.assertParameterNotNull(byteBuffer,"byteBuffer");
-        return nRecognizeByteBuffer(nativeReference, byteBuffer, pixelSize, width, height);
+        return nRecognizeByteBuffer(nativeReference, byteBuffer, pixelSize, width, height, regionOfInterest);
     }
 
     @Override
@@ -62,7 +66,5 @@ public final class Alpr implements Closeable {
 
     private static native AlprResult nRecognizeByteArray(long nativeReference, @NonNull byte[] pixelData, int width, int heigh);
 
-    private static native AlprResult nRecognizeByteBuffer(long nativeReference, @NonNull ByteBuffer byteBuffer, int pixelSize, int width, int height);
-
-
+    private static native AlprResult nRecognizeByteBuffer(long nativeReference, @NonNull ByteBuffer byteBuffer, int pixelSize, int width, int height, @Nullable RegionOfInterest regionOfInterest);
 }

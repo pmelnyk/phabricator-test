@@ -4,11 +4,11 @@ package com.andrasta.dashi.openalpr;
  * Created by breh on 2/16/17.
  */
 
-public final class RegoinOfInterest {
+public final class RegionOfInterest {
 
     private final int x, y, width, height;
 
-    public RegoinOfInterest(int x, int y, int width, int height) {
+    public RegionOfInterest(int x, int y, int width, int height) {
         this.x = x;
         this.y = y;
         this.width = width;
